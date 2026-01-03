@@ -33,8 +33,12 @@ let isLoggingIn = false; // Login process flag
 let sessionCheckTimeout = null; // Session check timeout
 let emailPasswordLoginInProgress = false; // Flag to track email/password login
 
+// Undo delete state
+let pendingDelete = null; // { logId, logData, timeout }
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
+  initializeTheme();
   initializeGoogleSignIn();
   initializeAuthTabs();
   setupEventListeners();
@@ -50,6 +54,35 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSupabaseSession();
   }, 100); // Small delay to prevent race conditions
 });
+
+// Theme management
+function initializeTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('theme', newTheme);
+  updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+  const lightIcon = document.querySelector('.theme-icon-light');
+  const darkIcon = document.querySelector('.theme-icon-dark');
+  if (lightIcon && darkIcon) {
+    if (theme === 'dark') {
+      lightIcon.classList.add('hidden');
+      darkIcon.classList.remove('hidden');
+    } else {
+      lightIcon.classList.remove('hidden');
+      darkIcon.classList.add('hidden');
+    }
+  }
+}
 
 // Prevent multiple session checks on page refresh
 let lastSessionCheck = 0;
@@ -866,19 +899,38 @@ async function handleEmailLogin(e) {
 }
 
 // Toast notification system
-function showToast(message, type = 'info', title = '') {
+function showToast(message, type = 'info', title = '', options = {}) {
   const container = document.getElementById('toastContainer');
-  if (!container) return;
+  if (!container) return null;
   
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
+  toast.style.position = 'relative';
   
+  // Animated SVG icons
   const icons = {
-    success: '✅',
-    error: '❌',
-    warning: '⚠️',
-    info: 'ℹ️'
+    success: `<svg class="icon-animated" viewBox="0 0 52 52">
+      <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none" stroke-width="2"/>
+      <path class="checkmark-check" fill="none" stroke-width="3" d="M14 27l7 7 16-16"/>
+    </svg>`,
+    error: `<svg class="icon-animated" viewBox="0 0 52 52" style="color: var(--danger)">
+      <circle cx="26" cy="26" r="25" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path stroke="currentColor" stroke-width="3" d="M16 16l20 20M36 16L16 36"/>
+    </svg>`,
+    warning: `<svg class="icon-animated" viewBox="0 0 52 52" style="color: var(--warning)">
+      <path fill="currentColor" d="M26 4L2 48h48L26 4zm0 8l18 32H8L26 12z"/>
+      <rect x="24" y="20" width="4" height="12" fill="currentColor"/>
+      <rect x="24" y="36" width="4" height="4" fill="currentColor"/>
+    </svg>`,
+    info: `<svg class="icon-animated" viewBox="0 0 52 52" style="color: var(--info)">
+      <circle cx="26" cy="26" r="25" fill="none" stroke="currentColor" stroke-width="2"/>
+      <rect x="24" y="22" width="4" height="14" fill="currentColor"/>
+      <rect x="24" y="14" width="4" height="4" fill="currentColor"/>
+    </svg>`
   };
+  
+  const undoButton = options.onUndo ? `<button class="toast-undo" onclick="event.stopPropagation()">Undo</button>` : '';
+  const progressBar = options.showProgress ? `<div class="toast-progress"></div>` : '';
   
   toast.innerHTML = `
     <span class="toast-icon">${icons[type] || icons.info}</span>
@@ -886,15 +938,29 @@ function showToast(message, type = 'info', title = '') {
       ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
       <div class="toast-message">${escapeHtml(message)}</div>
     </div>
+    ${undoButton}
     <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+    ${progressBar}
   `;
+  
+  // Add undo handler
+  if (options.onUndo) {
+    const undoBtn = toast.querySelector('.toast-undo');
+    if (undoBtn) {
+      undoBtn.addEventListener('click', () => {
+        options.onUndo();
+        toast.remove();
+      });
+    }
+  }
   
   container.appendChild(toast);
   
-  // Auto remove after 5 seconds
+  // Auto remove after timeout (default 5 seconds)
+  const timeout = options.timeout || 5000;
   setTimeout(() => {
     if (toast.parentElement) {
-      toast.style.animation = 'slideInRight 0.3s ease reverse';
+      toast.style.animation = 'toastSlideIn 0.3s ease reverse';
       setTimeout(() => toast.remove(), 300);
     }
   }, 5000);
@@ -955,6 +1021,37 @@ function hideDeleteUserModal() {
 
 // Setup event listeners
 function setupEventListeners() {
+  // Theme toggle
+  const themeToggle = document.getElementById('themeToggle');
+  if (themeToggle) {
+    themeToggle.addEventListener('click', toggleTheme);
+  }
+  
+  // Quick add buttons
+  const quickAddButtons = document.querySelectorAll('.quick-add-btn:not(.quick-add-custom)');
+  quickAddButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const hours = parseFloat(btn.dataset.hours);
+      if (hours && currentUser) {
+        quickAddOvertime(hours);
+      }
+    });
+  });
+  
+  // Quick add custom button - opens form
+  const quickAddCustomBtn = document.getElementById('quickAddCustomBtn');
+  if (quickAddCustomBtn) {
+    quickAddCustomBtn.addEventListener('click', () => {
+      const addFormToggle = document.getElementById('addFormToggle');
+      const addLogForm = document.getElementById('addLogForm');
+      if (addFormToggle && addLogForm) {
+        addLogForm.classList.remove('hidden');
+        addFormToggle.classList.add('hidden');
+        document.getElementById('logHours')?.focus();
+      }
+    });
+  }
+  
   // Auth forms
   const emailLoginForm = document.getElementById('emailLoginForm');
   const emailRegisterForm = document.getElementById('emailRegisterForm');
@@ -1489,9 +1586,145 @@ function renderUserView() {
   if (monthHoursEl) monthHoursEl.textContent = monthHours.toFixed(1) + ' hrs';
   if (totalEntriesEl) totalEntriesEl.textContent = currentLogs.length.toString();
   
+  // Render stats chart
+  renderStatsChart();
+  
   // Apply date filter
   filteredLogs = filterLogsByDate(currentLogs, currentDateFilter);
   renderUserLogs();
+}
+
+// Quick add overtime entry
+async function quickAddOvertime(hours) {
+  if (!currentUser) return;
+  
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Optimistic update
+  const creditedHours = hours * currentMultiplier;
+  const tempLog = {
+    id: 'temp-' + Date.now(),
+    userEmail: currentUser.email,
+    date: today,
+    type: 'overtime',
+    factHours: hours,
+    creditedHours: creditedHours,
+    comment: 'Quick add',
+    approvedBy: ''
+  };
+  
+  currentLogs.push(tempLog);
+  renderUserView();
+  
+  // Save to Supabase
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    const { data, error } = await supabaseClient
+      .from('logs')
+      .insert([{
+        user_email: currentUser.email,
+        date: today,
+        type: 'overtime',
+        fact_hours: hours,
+        credited_hours: creditedHours,
+        comment: 'Quick add',
+        approved_by: ''
+      }])
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    // Remove temp and reload
+    currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+    await loadData();
+    showToast(`+${hours} hour${hours > 1 ? 's' : ''} overtime added!`, 'success');
+  } catch (error) {
+    // Rollback
+    currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+    renderUserView();
+    console.error('Quick add error:', error);
+    showToast('Error adding entry: ' + error.message, 'error', 'Error');
+  }
+}
+
+// Render statistics chart for last 30 days
+function renderStatsChart() {
+  const chartContainer = document.getElementById('statsChart');
+  if (!chartContainer) return;
+  
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  // Get logs for last 30 days
+  const recentLogs = currentLogs.filter(log => {
+    const logDate = new Date(log.date);
+    return logDate >= thirtyDaysAgo && logDate <= now;
+  });
+  
+  // Group by date
+  const dailyData = {};
+  for (let i = 0; i < 30; i++) {
+    const date = new Date(thirtyDaysAgo);
+    date.setDate(date.getDate() + i);
+    const dateStr = date.toISOString().split('T')[0];
+    dailyData[dateStr] = { overtime: 0, timeoff: 0, net: 0 };
+  }
+  
+  recentLogs.forEach(log => {
+    const dateStr = log.date.split('T')[0];
+    if (dailyData[dateStr]) {
+      const credited = parseFloat(log.creditedHours) || 0;
+      if (log.type === 'overtime') {
+        dailyData[dateStr].overtime += credited;
+      } else {
+        dailyData[dateStr].timeoff += Math.abs(credited);
+      }
+      dailyData[dateStr].net += credited;
+    }
+  });
+  
+  // Find max value for scaling
+  const values = Object.values(dailyData).map(d => Math.max(Math.abs(d.net), 0.1));
+  const maxValue = Math.max(...values, 1);
+  
+  // Calculate totals
+  let totalOvertime = 0;
+  let totalTimeoff = 0;
+  Object.values(dailyData).forEach(d => {
+    totalOvertime += d.overtime;
+    totalTimeoff += d.timeoff;
+  });
+  const netChange = totalOvertime - totalTimeoff;
+  
+  // Update summary
+  const overtimeEl = document.getElementById('statsTotalOvertime');
+  const timeoffEl = document.getElementById('statsTotalTimeoff');
+  const netEl = document.getElementById('statsNetChange');
+  
+  if (overtimeEl) overtimeEl.textContent = `+${totalOvertime.toFixed(1)} hrs`;
+  if (timeoffEl) timeoffEl.textContent = `-${totalTimeoff.toFixed(1)} hrs`;
+  if (netEl) {
+    netEl.textContent = `${netChange >= 0 ? '+' : ''}${netChange.toFixed(1)} hrs`;
+    netEl.className = `stats-value ${netChange > 0 ? 'positive' : netChange < 0 ? 'negative' : ''}`;
+  }
+  
+  // Render bars
+  const bars = Object.entries(dailyData).map(([date, data]) => {
+    const height = Math.max((Math.abs(data.net) / maxValue) * 100, 4);
+    const barClass = data.net > 0 ? 'positive' : data.net < 0 ? 'negative' : 'zero';
+    const dateObj = new Date(date);
+    const tooltip = `${dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: ${data.net >= 0 ? '+' : ''}${data.net.toFixed(1)} hrs`;
+    
+    return `<div class="stats-bar ${barClass}" style="height: ${height}%" data-tooltip="${tooltip}"></div>`;
+  }).join('');
+  
+  chartContainer.innerHTML = bars;
 }
 
 // Filter user logs
@@ -1959,49 +2192,88 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
   }
 }
 
-// Delete log entry with optimistic update
+// Delete log entry with undo support
 async function handleDeleteLog(logId) {
-  // Optimistic update - remove from UI immediately
+  // Cancel any pending delete
+  if (pendingDelete && pendingDelete.timeout) {
+    clearTimeout(pendingDelete.timeout);
+    pendingDelete = null;
+  }
+  
+  // Find log to delete
   const logToDelete = currentLogs.find(log => log.id == logId);
-  if (logToDelete) {
-    currentLogs = currentLogs.filter(log => log.id != logId);
+  if (!logToDelete) return;
+  
+  // Remove from UI immediately (optimistic)
+  currentLogs = currentLogs.filter(log => log.id != logId);
+  
+  // Update UI immediately
+  if (currentUser.role === 'admin') {
+    renderAdminView();
+  } else {
+    renderUserView();
+  }
+  
+  // Show toast with undo button
+  const undoHandler = () => {
+    // Cancel the pending delete
+    if (pendingDelete && pendingDelete.timeout) {
+      clearTimeout(pendingDelete.timeout);
+    }
     
-    // Update UI immediately
+    // Restore the log
+    currentLogs.push(logToDelete);
+    pendingDelete = null;
+    
+    // Update UI
     if (currentUser.role === 'admin') {
       renderAdminView();
     } else {
       renderUserView();
     }
-  }
-  
-  // Delete from Supabase in background
-  if (!supabaseClient) {
-    showToast('Supabase client not initialized', 'error', 'Error');
-    return;
-  }
-  
-  try {
-    const { error } = await supabaseClient
-      .from('logs')
-      .delete()
-      .eq('id', logId);
     
-    if (error) throw error;
-    
-    showToast('Entry successfully deleted', 'success');
-  } catch (error) {
-    // Rollback on error
-    if (logToDelete) {
-      currentLogs.push(logToDelete);
-      if (currentUser.role === 'admin') {
-        renderAdminView();
-      } else {
-        renderUserView();
+    showToast('Entry restored', 'info');
+  };
+  
+  showToast('Entry deleted', 'success', '', { 
+    onUndo: undoHandler,
+    showProgress: true,
+    timeout: 5000
+  });
+  
+  // Set up delayed actual deletion
+  pendingDelete = {
+    logId: logId,
+    logData: logToDelete,
+    timeout: setTimeout(async () => {
+      // Actually delete from Supabase
+      if (!supabaseClient) {
+        console.error('Supabase client not initialized');
+        return;
       }
-    }
-    console.error('Delete error:', error);
-    showToast('Error deleting: ' + error.message, 'error', 'Error');
-  }
+      
+      try {
+        const { error } = await supabaseClient
+          .from('logs')
+          .delete()
+          .eq('id', logId);
+        
+        if (error) throw error;
+        pendingDelete = null;
+      } catch (error) {
+        // Rollback on error
+        console.error('Delete error:', error);
+        currentLogs.push(logToDelete);
+        if (currentUser.role === 'admin') {
+          renderAdminView();
+        } else {
+          renderUserView();
+        }
+        showToast('Error deleting: ' + error.message, 'error', 'Error');
+        pendingDelete = null;
+      }
+    }, 5000) // 5 seconds delay before actual deletion
+  };
 }
 
 // Update user name
