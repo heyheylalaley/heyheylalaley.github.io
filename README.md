@@ -16,14 +16,13 @@ Web application for tracking overtime and time off for employees.
 - ✅ Add overtime and time off entries
 - ✅ View personal history
 - ✅ Edit own name
-- ✅ Export personal data to CSV
+
 
 ### For Administrators:
 - ✅ View all employees and their balances
 - ✅ View all entries
 - ✅ Delete entries
 - ✅ Delete users
-- ✅ Export monthly report to CSV
 
 ## 🚀 Quick Start
 
