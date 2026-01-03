@@ -1558,7 +1558,7 @@ function filterLogsByDate(logs, filterType) {
   const now = new Date();
   now.setHours(23, 59, 59, 999);
   
-  const today = new Date(now);
+  const today = new Date();
   today.setHours(0, 0, 0, 0);
   
   const startOfWeek = new Date(today);
@@ -1568,9 +1568,13 @@ function filterLogsByDate(logs, filterType) {
   startOfWeek.setHours(0, 0, 0, 0);
   
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  startOfMonth.setHours(0, 0, 0, 0);
   
   return logs.filter(log => {
-    const logDate = new Date(log.date);
+    // Parse date string as local date to avoid timezone issues
+    const dateStr = log.date.split('T')[0];
+    const parts = dateStr.split('-');
+    const logDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     logDate.setHours(0, 0, 0, 0);
     
     switch (filterType) {

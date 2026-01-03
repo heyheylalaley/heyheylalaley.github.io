@@ -134,6 +134,60 @@
   color: var(--text-primary);
 }
 
+[data-theme="dark"] .date-filter-btn {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .date-filter-btn:hover {
+  background: var(--border-hover);
+  border-color: var(--border-hover);
+}
+
+[data-theme="dark"] .date-filter-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+[data-theme="dark"] .btn-secondary {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .btn-secondary:hover {
+  background: var(--border-hover);
+}
+
+[data-theme="dark"] .quick-add-btn {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--success);
+}
+
+[data-theme="dark"] .quick-add-btn:hover {
+  background: var(--success);
+}
+
+[data-theme="dark"] .quick-add-custom {
+  background: rgba(79, 70, 229, 0.15);
+}
+
+[data-theme="dark"] .quick-add-custom:hover {
+  background: var(--primary);
+}
+
+[data-theme="dark"] .search-input {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+[data-theme="dark"] .search-input::placeholder {
+  color: var(--text-muted);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-primary);
