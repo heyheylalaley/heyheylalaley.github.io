@@ -141,31 +141,9 @@ function setupAuthListener() {
       
       // Skip showing toast if email/password login is in progress (it will show its own message)
       if (emailPasswordLoginInProgress) {
-        console.log('Email/password login in progress, skipping onAuthStateChange toast');
-        // Still process the login, just don't show duplicate toast
-        try {
-          await new Promise(resolve => setTimeout(resolve, 300));
-          const normalizedEmail = session.user.email.toLowerCase().trim();
-          const userData = await findUserByEmail(normalizedEmail);
-          if (userData) {
-            currentUser = {
-              id: userData.id,
-              name: userData.name,
-              email: userData.email,
-              role: userData.role
-            };
-            localStorage.setItem('user', JSON.stringify(currentUser));
-            if (document.getElementById('mainApp').classList.contains('hidden')) {
-              showMainApp();
-              loadData();
-            }
-            if (window.location.hash) {
-              window.history.replaceState({}, document.title, window.location.pathname);
-            }
-          }
-        } catch (error) {
-          console.error('Error in onAuthStateChange (email/password login):', error);
-        }
+        console.log('Email/password login in progress, skipping onAuthStateChange processing');
+        // Don't process here - let handleEmailLogin handle everything
+        // This prevents duplicate processing and UI updates
         return;
       }
       
