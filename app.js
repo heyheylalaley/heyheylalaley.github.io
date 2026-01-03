@@ -120,15 +120,29 @@ function setupEventListeners() {
     resetAdminForm();
   });
   
-  // Type selection
-  document.querySelectorAll('.type-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const form = btn.closest('form');
-      form.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      updateCreditedPreview();
+  // Type selection - user form
+  const userForm = document.getElementById('addLogForm');
+  if (userForm) {
+    userForm.querySelectorAll('.type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        userForm.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateCreditedPreview();
+      });
     });
-  });
+  }
+  
+  // Type selection - admin form
+  const adminForm = document.getElementById('adminAddLogForm');
+  if (adminForm) {
+    adminForm.querySelectorAll('.type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        adminForm.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateAdminCreditedPreview();
+      });
+    });
+  }
   
   // Form fields
   const logHours = document.getElementById('logHours');
@@ -142,16 +156,14 @@ function setupEventListeners() {
   if (adminLogDate) adminLogDate.valueAsDate = new Date();
   
   // Form submission
-  document.getElementById('addLogForm').addEventListener('submit', handleAddLog);
-  document.getElementById('adminAddLogForm').addEventListener('submit', handleAdminAddLog);
+  const addLogForm = document.getElementById('addLogForm');
+  const adminAddLogForm = document.getElementById('adminAddLogForm');
+  if (addLogForm) addLogForm.addEventListener('submit', handleAddLog);
+  if (adminAddLogForm) adminAddLogForm.addEventListener('submit', handleAdminAddLog);
   
   // Admin buttons
   const settingsBtn = document.getElementById('settingsBtn');
-  const exportBtn = document.getElementById('exportBtn');
-  const userExportBtn = document.getElementById('userExportBtn');
   if (settingsBtn) settingsBtn.addEventListener('click', handleUpdateMultiplier);
-  if (exportBtn) exportBtn.addEventListener('click', handleAdminExport);
-  if (userExportBtn) userExportBtn.addEventListener('click', handleUserExport);
 }
 
 // Show main app
@@ -163,14 +175,12 @@ function showMainApp() {
     document.getElementById('userView').classList.add('hidden');
     document.getElementById('adminView').classList.remove('hidden');
     document.getElementById('adminControls').classList.remove('hidden');
-    document.getElementById('userExportBtn').classList.add('hidden');
     document.getElementById('headerTitle').textContent = 'Admin Panel';
     document.getElementById('headerSubtitle').textContent = currentUser.name;
   } else {
     document.getElementById('userView').classList.remove('hidden');
     document.getElementById('adminView').classList.add('hidden');
     document.getElementById('adminControls').classList.add('hidden');
-    document.getElementById('userExportBtn').classList.remove('hidden');
     document.getElementById('headerTitle').textContent = 'Overtime Tracker';
     document.getElementById('headerSubtitle').textContent = currentUser.name;
   }
@@ -211,10 +221,10 @@ async function loadUserLogs() {
     if (data.success) {
       currentLogs = data.logs || [];
     } else {
-      console.error('Ошибка загрузки логов:', data.message);
+      console.error('Logs loading error:', data.message);
     }
   } catch (error) {
-    console.error('Ошибка загрузки логов:', error);
+    console.error('Logs loading error:', error);
     throw error;
   }
 }
@@ -229,10 +239,10 @@ async function loadAllLogs() {
     if (data.success) {
       currentLogs = data.logs || [];
     } else {
-      console.error('Ошибка загрузки всех логов:', data.message);
+      console.error('All logs loading error:', data.message);
     }
   } catch (error) {
-    console.error('Ошибка загрузки всех логов:', error);
+    console.error('All logs loading error:', error);
     throw error;
   }
 }
@@ -247,10 +257,10 @@ async function loadUsers() {
     if (data.success) {
       currentUsers = data.users || [];
     } else {
-      console.error('Ошибка загрузки пользователей:', data.message);
+      console.error('Users loading error:', data.message);
     }
   } catch (error) {
-    console.error('Ошибка загрузки пользователей:', error);
+    console.error('Users loading error:', error);
     throw error;
   }
 }
@@ -268,16 +278,36 @@ async function loadSettings() {
       document.getElementById('userMultiplier').textContent = currentMultiplier;
     }
   } catch (error) {
-    console.error('Ошибка загрузки настроек:', error);
-    // Не бросаем ошибку, используем значение по умолчанию
+    console.error('Settings loading error:', error);
+    // Don't throw error, use default value
   }
 }
 
 // Format date to DD-MM-YYYY
 function formatDate(dateString) {
   if (!dateString) return '';
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString;
+  
+  // Handle ISO format (2026-01-03T00:00:00.000Z) or YYYY-MM-DD format
+  let date;
+  if (dateString.includes('T')) {
+    // ISO format
+    date = new Date(dateString);
+  } else if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    // YYYY-MM-DD format
+    const parts = dateString.split('-');
+    date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  } else {
+    date = new Date(dateString);
+  }
+  
+  if (isNaN(date.getTime())) {
+    // If parsing failed, try to extract date part from ISO string
+    const dateMatch = dateString.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      return `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+    }
+    return dateString;
+  }
   
   const day = String(date.getDate()).padStart(2, '0');
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -308,8 +338,12 @@ function renderUserLogs() {
     return;
   }
   
-  // Sort by date (newest first)
-  const sortedLogs = [...currentLogs].sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Sort by date (newest first) - handle ISO format dates
+  const sortedLogs = [...currentLogs].sort((a, b) => {
+    const dateA = new Date(a.date);
+    const dateB = new Date(b.date);
+    return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
+  });
   
   container.innerHTML = sortedLogs.map(log => {
     const credited = parseFloat(log.creditedHours) || 0;
@@ -408,8 +442,12 @@ function renderAdminLogs(filterEmail = null) {
     ? currentLogs.filter(log => log.userEmail === filterEmail)
     : currentLogs;
   
-  // Sort by date (newest first)
-  logsToShow = [...logsToShow].sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Sort by date (newest first) - handle ISO format dates
+  logsToShow = [...logsToShow].sort((a, b) => {
+    const dateA = new Date(a.date);
+    const dateB = new Date(b.date);
+    return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
+  });
   
   if (logsToShow.length === 0) {
     container.innerHTML = '<tr><td colspan="7" class="empty-state">No records</td></tr>';
