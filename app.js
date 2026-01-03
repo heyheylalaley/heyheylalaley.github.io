@@ -767,7 +767,7 @@ async function handleEmailLogin(e) {
         // onAuthStateChange should handle this, but give it time
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Проверим еще раз
+        // Check again
         const retryUserData = await findUserByEmail(normalizedEmail);
         if (retryUserData) {
           currentUser = {
