@@ -132,6 +132,12 @@ function setupAuthListener() {
     
     if (event === 'SIGNED_IN' && session) {
       // User successfully signed in
+      // Only process if user is not already loaded (to avoid duplicate messages)
+      if (currentUser) {
+        console.log('User already loaded, skipping onAuthStateChange processing');
+        return;
+      }
+      
       try {
         // Wait a bit for trigger to create user
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -152,7 +158,10 @@ function setupAuthListener() {
           localStorage.setItem('user', JSON.stringify(currentUser));
           showMainApp();
           loadData();
-          showToast('Login successful', 'success');
+          // Only show toast if user wasn't already loaded (e.g., OAuth login)
+          if (!document.getElementById('mainApp').classList.contains('hidden')) {
+            showToast('Login successful', 'success');
+          }
           
           // Remove hash from URL after successful login
           if (window.location.hash) {
