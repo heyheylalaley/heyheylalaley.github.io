@@ -405,7 +405,8 @@ async function handleEmailRegister(e) {
       .maybeSingle();
     
     if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      throw checkError;
+      // Log error but don't block registration - let Supabase handle it
+      console.warn('Error checking existing user:', checkError);
     }
     
     if (existingUser) {
@@ -431,14 +432,20 @@ async function handleEmailRegister(e) {
     
     if (authError) {
       // Handle specific Supabase errors
-      if (authError.message.includes('already registered') || 
-          authError.message.includes('User already registered') ||
-          authError.message.includes('already exists')) {
+      const errorMsg = authError.message.toLowerCase();
+      if (errorMsg.includes('already registered') || 
+          errorMsg.includes('user already registered') ||
+          errorMsg.includes('already exists') ||
+          errorMsg.includes('user already exists')) {
         showToast('This email is already registered. Please sign in instead.', 'warning', 'Email Already Exists');
         hideLoading();
         return;
       }
-      throw authError;
+      // Show more detailed error message
+      console.error('Registration error:', authError);
+      showToast(authError.message || 'Registration failed. Please try again.', 'error', 'Registration Error');
+      hideLoading();
+      return;
     }
     
     if (authData.user) {
@@ -506,22 +513,75 @@ async function handleEmailLogin(e) {
     return;
   }
   
+  // Normalize email (same as registration)
+  const normalizedEmail = email.toLowerCase().trim();
+  
   showLoading();
   try {
     // Sign in with email/password
     const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
-      email: email,
+      email: normalizedEmail,
       password: password
     });
     
-    if (authError) throw authError;
+    if (authError) {
+      // Handle specific errors
+      if (authError.message.includes('Invalid login credentials') || 
+          authError.message.includes('invalid') ||
+          authError.message.includes('wrong password')) {
+        showToast('Invalid email or password. Please check your credentials.', 'error', 'Login Error');
+        hideLoading();
+        return;
+      }
+      if (authError.message.includes('Email not confirmed') || 
+          authError.message.includes('email not verified')) {
+        showToast('Please check your email and verify your account before signing in.', 'warning', 'Email Not Verified');
+        hideLoading();
+        return;
+      }
+      throw authError;
+    }
     
     if (authData.user) {
       // Wait a bit for trigger to create user if needed
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       // Find user in database
-      const userData = await findUserByEmail(email);
+      // If user doesn't exist in users table but exists in auth, create them
+      let userData = await findUserByEmail(normalizedEmail);
+      
+      if (!userData) {
+        // User exists in auth but not in users table - trigger might have failed
+        // Try to create user manually
+        console.warn('User exists in auth but not in users table, creating user...');
+        const userName = authData.user.user_metadata?.full_name || 
+                        authData.user.user_metadata?.name || 
+                        normalizedEmail.split('@')[0];
+        
+        const { data: newUser, error: createError } = await supabaseClient
+          .from('users')
+          .insert({
+            email: normalizedEmail,
+            name: userName,
+            role: 'user'
+          })
+          .select()
+          .single();
+        
+        if (createError && !createError.message.includes('duplicate')) {
+          console.error('Error creating user:', createError);
+          showToast('User account created but database error occurred. Please contact administrator.', 'error', 'Error');
+          hideLoading();
+          return;
+        }
+        
+        if (newUser) {
+          userData = newUser;
+        } else {
+          // Try to find again after insert
+          userData = await findUserByEmail(normalizedEmail);
+        }
+      }
       
       if (userData) {
         currentUser = {
