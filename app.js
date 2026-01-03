@@ -1,8 +1,15 @@
-// Конфигурация - ЗАМЕНИТЕ НА СВОИ ЗНАЧЕНИЯ
+// Конфигурация Supabase
 const CONFIG = {
-  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbwPN7R5be2PX35bbtPT8800UbkaYVo86UVJF9v_2qI2xUZrw1vMOCCWyedXB7L7jUFY/exec',
+  SUPABASE_URL: 'https://qwtwezxoodqfmdqpzkkl.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_iW0DJWq84mfMA30kA_HDOg_Fx99JPKU',
   GOOGLE_CLIENT_ID: '821999196894-20d8semsbtdp3dcpu4qf2p1h0u4okb39.apps.googleusercontent.com'
 };
+
+// Инициализация Supabase клиента
+let supabaseClient = null;
+if (typeof supabase !== 'undefined') {
+  supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+}
 
 // Глобальное состояние
 let currentUser = null;
@@ -17,82 +24,162 @@ let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 document.addEventListener('DOMContentLoaded', () => {
   initializeGoogleSignIn();
   setupEventListeners();
-  
-  // Проверка сохранённой сессии
-  const savedUser = localStorage.getItem('user');
-  if (savedUser) {
-    try {
-      currentUser = JSON.parse(savedUser);
-      showMainApp();
-      loadData();
-    } catch (e) {
-      localStorage.removeItem('user');
-    }
-  }
+  checkSupabaseSession();
 });
 
-// Инициализация Google Sign-In
-function initializeGoogleSignIn() {
-  window.onload = function() {
-    if (window.google && window.google.accounts) {
-      google.accounts.id.initialize({
-        client_id: CONFIG.GOOGLE_CLIENT_ID,
-        callback: handleCredentialResponse
-      });
+// Проверка сессии Supabase
+async function checkSupabaseSession() {
+  if (!supabaseClient) {
+    console.error('Supabase client not initialized');
+    return;
+  }
+  
+  try {
+    // Проверяем существующую сессию
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    
+    if (session && !error) {
+      // Получаем информацию о пользователе из таблицы users
+      const { data: userData, error: userError } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('email', session.user.email)
+        .single();
       
-      google.accounts.id.renderButton(
-        document.getElementById('googleSignInButton'),
-        { theme: 'outline', size: 'large', text: 'signin_with', locale: 'en' }
-      );
+      if (userData && !userError) {
+        currentUser = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role
+        };
+        localStorage.setItem('user', JSON.stringify(currentUser));
+        showMainApp();
+        loadData();
+      }
     }
-  };
+    
+    // Обработка OAuth callback (если есть hash в URL)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    if (hashParams.get('access_token')) {
+      // Убираем hash из URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Сессия уже установлена через hash, получаем пользователя
+      const { data: { user } } = await supabaseClient.auth.getUser();
+      if (user) {
+        const { data: userData, error: userError } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('email', user.email)
+          .single();
+        
+        if (userData && !userError) {
+          currentUser = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role
+          };
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          showMainApp();
+          loadData();
+          showToast('Login successful', 'success');
+        } else {
+          showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Session check error:', error);
+    // Проверяем сохранённую сессию как fallback
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        currentUser = JSON.parse(savedUser);
+        showMainApp();
+        loadData();
+      } catch (e) {
+        localStorage.removeItem('user');
+      }
+    }
+  }
 }
 
-// Обработка авторизации
-async function handleCredentialResponse(response) {
+// Инициализация Google Sign-In через Supabase OAuth
+function initializeGoogleSignIn() {
+  // Создаем кнопку для Supabase OAuth
+  const buttonContainer = document.getElementById('googleSignInButton');
+  if (buttonContainer) {
+    buttonContainer.innerHTML = `
+      <button id="supabaseGoogleSignIn" class="google-signin-btn" style="
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #fff;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        color: #3c4043;
+        cursor: pointer;
+        font-family: 'Google Sans', arial, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        height: 40px;
+        letter-spacing: 0.25px;
+        padding: 0 12px;
+        text-align: center;
+        transition: background-color 0.218s, border-color 0.218s, box-shadow 0.218s;
+        width: auto;
+        min-width: 200px;
+      ">
+        <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
+          <g fill="#000" fill-rule="evenodd">
+            <path d="M9 3.48c1.69 0 2.83.73 3.48 1.34l2.54-2.48C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l2.91 2.26C4.6 5.05 6.62 3.48 9 3.48z" fill="#EA4335"/>
+            <path d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.21 1.18-.84 2.18-1.79 2.91l2.78 2.15c1.9-1.75 2.69-4.33 2.69-7.56z" fill="#4285F4"/>
+            <path d="M3.88 10.78A5.54 5.54 0 0 1 3.58 9c0-.62.11-1.22.29-1.78L.96 4.96A9.008 9.008 0 0 0 0 9c0 1.45.35 2.82.96 4.04l2.92-2.26z" fill="#FBBC05"/>
+            <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.78-2.15c-.76.53-1.78.9-3.18.9-2.38 0-4.4-1.57-5.12-3.74L.96 13.04C2.45 15.98 5.48 18 9 18z" fill="#34A853"/>
+          </g>
+        </svg>
+        Sign in with Google
+      </button>
+    `;
+    
+    document.getElementById('supabaseGoogleSignIn').addEventListener('click', handleGoogleSignIn);
+  }
+}
+
+// Обработка авторизации через Google OAuth (Supabase)
+async function handleGoogleSignIn() {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
   showLoading();
   try {
-    // Используем FormData для совместимости с Google Apps Script
-    // action передаём в URL, данные в FormData
-    const formData = new FormData();
-    formData.append('token', response.credential);
-    
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=login`, {
-      method: 'POST',
-      body: formData,
-      redirect: 'follow'
+    // Используем Google OAuth через Supabase
+    const { data, error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
     });
     
-    // Проверка статуса ответа
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
+    if (error) throw error;
     
-    const text = await res.text();
-    let data;
-    
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error('JSON parse error:', text);
-      throw new Error('Server returned invalid response. Check Google Apps Script settings.');
-    }
-    
-    if (data.success) {
-      currentUser = data.user;
-      localStorage.setItem('user', JSON.stringify(currentUser));
-      showMainApp();
-      loadData();
-      showToast('Login successful', 'success');
-    } else {
-      showToast(data.message || 'Authorization error', 'error', 'Login Error');
+    // Перенаправление на Google OAuth
+    if (data.url) {
+      window.location.href = data.url;
     }
   } catch (error) {
     console.error('Authorization error:', error);
-    const errorMessage = error.message || 'Unknown error';
-    showToast(`Connection error. Check CONFIG.GAS_API_URL settings`, 'error', 'Connection Error');
+    showToast(error.message || 'Authorization error', 'error', 'Login Error');
+    hideLoading();
   }
-  hideLoading();
 }
 
 // Toast notification system
@@ -328,6 +415,26 @@ function setupEventListeners() {
   // Admin buttons
   const settingsBtn = document.getElementById('settingsBtn');
   if (settingsBtn) settingsBtn.addEventListener('click', showMultiplierModal);
+  
+  // Export buttons
+  const userExportBtn = document.getElementById('userExportBtn');
+  if (userExportBtn) userExportBtn.addEventListener('click', handleUserExport);
+  
+  // Search input for user view
+  const userSearchInput = document.getElementById('userSearchInput');
+  if (userSearchInput) {
+    userSearchInput.addEventListener('input', () => {
+      const searchTerm = userSearchInput.value.toLowerCase();
+      if (searchTerm) {
+        filteredLogs = currentLogs.filter(log => 
+          (log.comment && log.comment.toLowerCase().includes(searchTerm))
+        );
+      } else {
+        filteredLogs = filterLogsByDate(currentLogs, currentDateFilter);
+      }
+      renderUserLogs();
+    });
+  }
 }
 
 // Show main app
@@ -382,16 +489,29 @@ async function loadData() {
 
 // Загрузка логов пользователя
 async function loadUserLogs() {
+  if (!supabaseClient) throw new Error('Supabase client not initialized');
+  
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getLogs&email=${encodeURIComponent(currentUser.email)}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const data = JSON.parse(text);
-    if (data.success) {
-      currentLogs = data.logs || [];
-    } else {
-      console.error('Logs loading error:', data.message);
-    }
+    const { data, error } = await supabaseClient
+      .from('logs')
+      .select('*')
+      .eq('user_email', currentUser.email)
+      .order('date', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Преобразуем формат данных для совместимости
+    currentLogs = (data || []).map(log => ({
+      id: log.id,
+      userEmail: log.user_email,
+      date: log.date,
+      type: log.type,
+      factHours: log.fact_hours,
+      creditedHours: log.credited_hours,
+      comment: log.comment || '',
+      createdAt: log.created_at,
+      approvedBy: log.approved_by || ''
+    }));
   } catch (error) {
     console.error('Logs loading error:', error);
     throw error;
@@ -400,16 +520,28 @@ async function loadUserLogs() {
 
 // Загрузка всех логов (админ)
 async function loadAllLogs() {
+  if (!supabaseClient) throw new Error('Supabase client not initialized');
+  
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getAllLogs`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const data = JSON.parse(text);
-    if (data.success) {
-      currentLogs = data.logs || [];
-    } else {
-      console.error('All logs loading error:', data.message);
-    }
+    const { data, error } = await supabaseClient
+      .from('logs')
+      .select('*')
+      .order('date', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Преобразуем формат данных для совместимости
+    currentLogs = (data || []).map(log => ({
+      id: log.id,
+      userEmail: log.user_email,
+      date: log.date,
+      type: log.type,
+      factHours: log.fact_hours,
+      creditedHours: log.credited_hours,
+      comment: log.comment || '',
+      createdAt: log.created_at,
+      approvedBy: log.approved_by || ''
+    }));
   } catch (error) {
     console.error('All logs loading error:', error);
     throw error;
@@ -418,16 +550,16 @@ async function loadAllLogs() {
 
 // Загрузка пользователей (админ)
 async function loadUsers() {
+  if (!supabaseClient) throw new Error('Supabase client not initialized');
+  
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getUsers`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const data = JSON.parse(text);
-    if (data.success) {
-      currentUsers = data.users || [];
-    } else {
-      console.error('Users loading error:', data.message);
-    }
+    const { data, error } = await supabaseClient
+      .from('users')
+      .select('*')
+      .order('name');
+    
+    if (error) throw error;
+    currentUsers = data || [];
   } catch (error) {
     console.error('Users loading error:', error);
     throw error;
@@ -436,15 +568,29 @@ async function loadUsers() {
 
 // Загрузка настроек
 async function loadSettings() {
+  if (!supabaseClient) {
+    // Используем значение по умолчанию
+    return;
+  }
+  
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getSettings`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    const data = JSON.parse(text);
-    if (data.success && data.settings) {
-      currentMultiplier = parseFloat(data.settings.overtimeMultiplier) || 1.5;
-      document.getElementById('multiplierDisplay').textContent = currentMultiplier;
-      document.getElementById('userMultiplier').textContent = currentMultiplier;
+    const { data, error } = await supabaseClient
+      .from('settings')
+      .select('*');
+    
+    if (error) throw error;
+    
+    const settings = {};
+    (data || []).forEach(row => {
+      settings[row.key] = row.value;
+    });
+    
+    if (settings.overtimeMultiplier) {
+      currentMultiplier = parseFloat(settings.overtimeMultiplier) || 1.5;
+      const multiplierDisplay = document.getElementById('multiplierDisplay');
+      const userMultiplier = document.getElementById('userMultiplier');
+      if (multiplierDisplay) multiplierDisplay.textContent = currentMultiplier;
+      if (userMultiplier) userMultiplier.textContent = currentMultiplier;
     }
   } catch (error) {
     console.error('Settings loading error:', error);
@@ -902,53 +1048,33 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
     }, 200);
   }
   
-  // Save to server in background
+  // Save to Supabase in background
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
   try {
-    const formData = new FormData();
-    formData.append('userEmail', userEmail);
-    formData.append('date', date);
-    formData.append('type', type);
-    formData.append('factHours', factHours.toString());
-    formData.append('creditedHours', creditedHours.toString());
-    formData.append('comment', comment);
-    if (approvedBy) {
-      formData.append('approvedBy', approvedBy);
-    }
+    const { data, error } = await supabaseClient
+      .from('logs')
+      .insert([{
+        user_email: userEmail,
+        date: date,
+        type: type,
+        fact_hours: factHours,
+        credited_hours: creditedHours,
+        comment: comment || '',
+        approved_by: approvedBy || ''
+      }])
+      .select()
+      .single();
     
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=addLog`, {
-      method: 'POST',
-      body: formData,
-      redirect: 'follow'
-    });
+    if (error) throw error;
     
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error('JSON parse error:', text);
-      throw new Error('Server returned invalid response');
-    }
-    
-    if (data.success) {
-      // Remove temp entry and reload real data
-      currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
-      await loadData();
-      showToast('Entry successfully added', 'success');
-    } else {
-      // Rollback on error
-      currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
-      if (currentUser.role === 'admin') {
-        renderAdminView();
-      } else {
-        renderUserView();
-      }
-      showToast(data.message || 'Error saving', 'error', 'Error');
-    }
+    // Remove temp entry and reload real data
+    currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+    await loadData();
+    showToast('Entry successfully added', 'success');
   } catch (error) {
     // Rollback on error
     currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
@@ -977,40 +1103,21 @@ async function handleDeleteLog(logId) {
     }
   }
   
-  // Delete from server in background
+  // Delete from Supabase in background
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=deleteLog&id=${logId}`, {
-      method: 'POST',
-      redirect: 'follow'
-    });
+    const { error } = await supabaseClient
+      .from('logs')
+      .delete()
+      .eq('id', logId);
     
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
+    if (error) throw error;
     
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error('JSON parse error:', text);
-      throw new Error('Server returned invalid response');
-    }
-    
-    if (!data.success) {
-      // Rollback on error
-      if (logToDelete) {
-        currentLogs.push(logToDelete);
-        if (currentUser.role === 'admin') {
-          renderAdminView();
-        } else {
-          renderUserView();
-        }
-      }
-      showToast(data.message || 'Error deleting', 'error', 'Error');
-    } else {
-      showToast('Entry successfully deleted', 'success');
-    }
+    showToast('Entry successfully deleted', 'success');
   } catch (error) {
     // Rollback on error
     if (logToDelete) {
@@ -1046,81 +1153,152 @@ async function handleUpdateMultiplier(multiplier) {
     document.getElementById('adminMultiplier').textContent = multiplier;
   }
   
-  // Save to server in background
+  // Save to Supabase in background
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
   try {
-    const formData = new FormData();
-    formData.append('overtimeMultiplier', multiplier.toString());
+    const { error } = await supabaseClient
+      .from('settings')
+      .upsert({ key: 'overtimeMultiplier', value: multiplier.toString() }, { onConflict: 'key' });
     
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=updateSettings`, {
-      method: 'POST',
-      body: formData,
-      redirect: 'follow'
-    });
+    if (error) throw error;
     
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    
-    const text = await res.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      console.error('JSON parse error:', text);
-      throw new Error('Server returned invalid response');
-    }
-    
-    if (!data.success) {
-      // Rollback on error
-      currentMultiplier = oldMultiplier;
-      document.getElementById('multiplierDisplay').textContent = oldMultiplier;
-      if (document.getElementById('userMultiplier')) {
-        document.getElementById('userMultiplier').textContent = oldMultiplier;
-      }
-      if (document.getElementById('adminMultiplier')) {
-        document.getElementById('adminMultiplier').textContent = oldMultiplier;
-      }
-      showToast(data.message || 'Error updating', 'error', 'Error');
-    } else {
-      showToast('Multiplier successfully updated', 'success');
-    }
+    showToast('Multiplier successfully updated', 'success');
   } catch (error) {
     // Rollback on error
     currentMultiplier = oldMultiplier;
-    document.getElementById('multiplierDisplay').textContent = oldMultiplier;
-    if (document.getElementById('userMultiplier')) {
-      document.getElementById('userMultiplier').textContent = oldMultiplier;
-    }
-    if (document.getElementById('adminMultiplier')) {
-      document.getElementById('adminMultiplier').textContent = oldMultiplier;
-    }
+    const multiplierDisplay = document.getElementById('multiplierDisplay');
+    const userMultiplier = document.getElementById('userMultiplier');
+    const adminMultiplier = document.getElementById('adminMultiplier');
+    if (multiplierDisplay) multiplierDisplay.textContent = oldMultiplier;
+    if (userMultiplier) userMultiplier.textContent = oldMultiplier;
+    if (adminMultiplier) adminMultiplier.textContent = oldMultiplier;
     console.error('Update error:', error);
     showToast('Error updating: ' + error.message, 'error', 'Error');
   }
 }
 
 // Admin export (with user selection)
-function handleAdminExport() {
-  // Get selected user from filter
-  const selectedCard = document.querySelector('.user-card.selected');
-  let exportUrl = `${CONFIG.GAS_API_URL}?action=export`;
-  
-  if (selectedCard) {
-    const email = selectedCard.dataset.email;
-    if (email) {
-      exportUrl += `&email=${encodeURIComponent(email)}`;
-    }
+async function handleAdminExport() {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
   }
   
-  window.open(exportUrl, '_blank');
-  showToast('Экспорт начат', 'info');
+  try {
+    const selectedCard = document.querySelector('.user-card.selected');
+    const email = selectedCard ? selectedCard.dataset.email : null;
+    
+    // Получаем логи
+    let logsQuery = supabaseClient
+      .from('logs')
+      .select('*')
+      .order('date', { ascending: false });
+    
+    if (email) {
+      logsQuery = logsQuery.eq('user_email', email);
+    }
+    
+    const { data: logsData, error: logsError } = await logsQuery;
+    if (logsError) throw logsError;
+    
+    // Получаем всех пользователей для маппинга
+    const { data: usersData, error: usersError } = await supabaseClient
+      .from('users')
+      .select('*');
+    
+    if (usersError) throw usersError;
+    
+    // Создаем маппинг email -> user
+    const usersMap = {};
+    (usersData || []).forEach(user => {
+      usersMap[user.email] = user;
+    });
+    
+    // Формируем CSV
+    let csv = 'Date,Employee,Email,Type,Actual (hrs),Credited,Comment\n';
+    
+    (logsData || []).forEach(log => {
+      const dateObj = new Date(log.date);
+      const formattedDate = dateObj.getDate().toString().padStart(2, '0') + '-' + 
+                           (dateObj.getMonth() + 1).toString().padStart(2, '0') + '-' + 
+                           dateObj.getFullYear();
+      
+      const user = usersMap[log.user_email];
+      const userName = user ? user.name : log.user_email;
+      const userEmail = log.user_email;
+      
+      csv += `"${formattedDate}","${userName}","${userEmail}","${log.type === 'overtime' ? 'Overtime' : 'Time Off'}","${log.fact_hours}","${log.credited_hours}","${log.comment || ''}"\n`;
+    });
+    
+    // Создаем и скачиваем файл
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', email ? `overtime_report_${email.replace('@', '_at_')}.csv` : 'overtime_report_all.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Export completed', 'success');
+  } catch (error) {
+    console.error('Export error:', error);
+    showToast('Error exporting: ' + error.message, 'error', 'Error');
+  }
 }
 
 // User export
-function handleUserExport() {
-  const exportUrl = `${CONFIG.GAS_API_URL}?action=export&email=${encodeURIComponent(currentUser.email)}`;
-  window.open(exportUrl, '_blank');
-  showToast('Экспорт начат', 'info');
+async function handleUserExport() {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    const { data: logsData, error: logsError } = await supabaseClient
+      .from('logs')
+      .select('*')
+      .eq('user_email', currentUser.email)
+      .order('date', { ascending: false });
+    
+    if (logsError) throw logsError;
+    
+    // Формируем CSV
+    let csv = 'Date,Employee,Email,Type,Actual (hrs),Credited,Comment\n';
+    
+    (logsData || []).forEach(log => {
+      const dateObj = new Date(log.date);
+      const formattedDate = dateObj.getDate().toString().padStart(2, '0') + '-' + 
+                           (dateObj.getMonth() + 1).toString().padStart(2, '0') + '-' + 
+                           dateObj.getFullYear();
+      
+      const userName = currentUser.name;
+      const userEmail = currentUser.email;
+      
+      csv += `"${formattedDate}","${userName}","${userEmail}","${log.type === 'overtime' ? 'Overtime' : 'Time Off'}","${log.fact_hours}","${log.credited_hours}","${log.comment || ''}"\n`;
+    });
+    
+    // Создаем и скачиваем файл
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `overtime_report_${currentUser.email.replace('@', '_at_')}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showToast('Export completed', 'success');
+  } catch (error) {
+    console.error('Export error:', error);
+    showToast('Error exporting: ' + error.message, 'error', 'Error');
+  }
 }
 
 // Update credited hours preview (user form)
@@ -1184,7 +1362,11 @@ function resetForm() {
 }
 
 // Выход
-function logout() {
+async function logout() {
+  if (supabaseClient) {
+    await supabaseClient.auth.signOut();
+  }
+  
   currentUser = null;
   currentLogs = [];
   currentUsers = [];
