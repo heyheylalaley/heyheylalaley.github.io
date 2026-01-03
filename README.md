@@ -1,52 +1,52 @@
 # Toil Tracker
 
-Веб-приложение для учёта переработок и отгулов сотрудников.
+Web application for tracking overtime and time off for employees.
 
-## 🏗️ Архитектура
+## 🏗️ Architecture
 
 - **Frontend**: HTML + CSS + JavaScript (Vanilla)
-- **Хостинг**: GitHub Pages
+- **Hosting**: GitHub Pages
 - **Backend**: Supabase (PostgreSQL + Auth)
-- **База данных**: PostgreSQL (Supabase)
+- **Database**: PostgreSQL (Supabase)
 
-## 📋 Функционал
+## 📋 Features
 
-### Для сотрудников:
-- ✅ Просмотр текущего баланса отгулов
-- ✅ Добавление записей о переработках и отгулах
-- ✅ Просмотр личной истории
-- ✅ Редактирование своего имени
-- ✅ Экспорт личных данных в CSV
+### For Employees:
+- ✅ View current time off balance
+- ✅ Add overtime and time off entries
+- ✅ View personal history
+- ✅ Edit own name
+- ✅ Export personal data to CSV
 
-### Для администраторов:
-- ✅ Просмотр всех сотрудников и их балансов
-- ✅ Просмотр всех записей
-- ✅ Удаление записей
-- ✅ Удаление пользователей
-- ✅ Экспорт отчёта за месяц в CSV
+### For Administrators:
+- ✅ View all employees and their balances
+- ✅ View all entries
+- ✅ Delete entries
+- ✅ Delete users
+- ✅ Export monthly report to CSV
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### Шаг 1: Настройка Supabase
+### Step 1: Setup Supabase
 
-1. Создайте проект на [Supabase](https://supabase.com)
-2. Перейдите в **SQL Editor**
-3. Выполните SQL из файла `supabase-schema.sql`
-4. Настройте Google OAuth в **Authentication → Providers → Google**
+1. Create a project on [Supabase](https://supabase.com)
+2. Go to **SQL Editor**
+3. Execute SQL from `supabase-schema.sql` file
+4. Configure Google OAuth in **Authentication → Providers → Google**
 
-### Шаг 2: Настройка Google OAuth
+### Step 2: Setup Google OAuth
 
-1. Перейдите в [Google Cloud Console](https://console.cloud.google.com/)
-2. Создайте OAuth 2.0 Client ID
-3. Добавьте **Authorized redirect URIs**:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create OAuth 2.0 Client ID
+3. Add **Authorized redirect URIs**:
    - `https://YOUR_PROJECT.supabase.co/auth/v1/callback`
    - `https://YOUR_USERNAME.github.io`
-4. Скопируйте Client ID и Client Secret в Supabase
+4. Copy Client ID and Client Secret to Supabase
 
-### Шаг 3: Настройка Frontend
+### Step 3: Configure Frontend
 
-1. Откройте файл `app.js`
-2. Замените значения в объекте `CONFIG`:
+1. Open `app.js` file
+2. Replace values in `CONFIG` object:
    ```javascript
    const CONFIG = {
      SUPABASE_URL: 'https://YOUR_PROJECT.supabase.co',
@@ -55,66 +55,66 @@
    };
    ```
 
-### Шаг 4: Развёртывание на GitHub Pages
+### Step 4: Deploy to GitHub Pages
 
-1. Закоммитьте все файлы в репозиторий:
+1. Commit all files to repository:
    ```bash
    git add .
    git commit -m "Initial commit"
    git push
    ```
 
-2. В настройках репозитория:
-   - Перейдите в **Settings → Pages**
-   - **Source**: выберите ветку (обычно `main`)
+2. In repository settings:
+   - Go to **Settings → Pages**
+   - **Source**: select branch (usually `main`)
    - **Folder**: `/ (root)`
-   - Сохраните
+   - Save
 
-3. Через несколько минут сайт будет доступен по адресу:
+3. After a few minutes, the site will be available at:
    `https://YOUR_USERNAME.github.io`
 
-## 📁 Структура проекта
+## 📁 Project Structure
 
 ```
 .
-├── index.html          # Основной HTML файл
-├── styles.css          # Стили
-├── app.js             # Логика фронтенда
-├── supabase-schema.sql # Схема базы данных
-└── README.md          # Документация
+├── index.html          # Main HTML file
+├── styles.css          # Styles
+├── app.js             # Frontend logic
+├── supabase-schema.sql # Database schema
+└── README.md          # Documentation
 ```
 
-## 🔐 Безопасность
+## 🔐 Security
 
-- Авторизация через Google OAuth (Supabase)
-- Row Level Security (RLS) политики в PostgreSQL
-- Пользователи могут редактировать только свои данные
-- Админы имеют расширенные права доступа
+- Authentication via Google OAuth (Supabase)
+- Row Level Security (RLS) policies in PostgreSQL
+- Users can only edit their own data
+- Admins have extended access rights
 
-## 📊 Структура данных
+## 📊 Data Structure
 
-### Таблица users
+### users table
 | id | name | email | role | created_at |
 |----|------|-------|------|------------|
 | 1 | Ivan Petrov | ivan@company.com | user | 2025-01-10 |
 
-### Таблица logs
+### logs table
 | id | user_email | date | type | fact_hours | credited_hours | comment | created_at |
 |----|-----------|------|------|------------|----------------|---------|-------------|
 | 1 | ivan@... | 2025-01-10 | overtime | 4 | 6 | Project X | 2025-01-10 |
 
-**Формула начисления:**
-- Переработка: `credited_hours = fact_hours × 1.5`
-- Отгул: `credited_hours = -fact_hours`
+**Accrual formula:**
+- Overtime: `credited_hours = fact_hours × 1.5`
+- Time off: `credited_hours = -fact_hours`
 
-### Таблица settings
+### settings table
 | key | value |
 |-----|-------|
 | overtimeMultiplier | 1.5 |
 
-## 🧪 Локальная разработка
+## 🧪 Local Development
 
-Для локальной разработки можно использовать простой HTTP-сервер:
+For local development, you can use a simple HTTP server:
 
 ```bash
 # Python 3
@@ -127,12 +127,12 @@ npx http-server -p 8000
 php -S localhost:8000
 ```
 
-Затем откройте `http://localhost:8000` в браузере.
+Then open `http://localhost:8000` in your browser.
 
-## 📝 Лицензия
+## 📝 License
 
 MIT License
 
-## 👨‍💻 Автор
+## 👨‍💻 Author
 
-Создано для учёта переработок и отгулов сотрудников.
+Created for tracking overtime and time off for employees.
