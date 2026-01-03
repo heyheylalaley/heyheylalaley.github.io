@@ -487,7 +487,6 @@ function renderAdminLogs(filterEmail = null) {
   
   // Use documentFragment for better performance
   const fragment = document.createDocumentFragment();
-  const tbody = document.createElement('tbody');
   
   logsToShow.forEach((log, index) => {
     const credited = parseFloat(log.creditedHours) || 0;
@@ -517,7 +516,7 @@ function renderAdminLogs(filterEmail = null) {
         </button>
       </td>
     `;
-    tbody.appendChild(row);
+    fragment.appendChild(row);
     
     // Trigger fade-in animation
     requestAnimationFrame(() => {
@@ -526,7 +525,7 @@ function renderAdminLogs(filterEmail = null) {
     });
   });
   
-  fragment.appendChild(tbody);
+  // Clear and append rows directly (container is tbody)
   container.innerHTML = '';
   container.appendChild(fragment);
 }
