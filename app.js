@@ -297,9 +297,9 @@ async function checkSupabaseSession() {
       const { data: { session: finalSession }, error: finalError } = await supabaseClient.auth.getSession();
       
       if (finalSession && !finalError) {
-        // Нормализуем email для поиска
+        // Normalize email for search
         const normalizedEmail = finalSession.user.email.toLowerCase().trim();
-        // Ищем пользователя с повторными попытками
+        // Find user with retry attempts
         const userData = await findUserByEmail(normalizedEmail);
         
         if (userData) {
@@ -762,9 +762,9 @@ async function handleEmailLogin(e) {
         
         return; // Exit, login successful
       } else {
-        // Если пользователь все еще не найден, подождем еще
+        // If user still not found, wait a bit more
         console.warn('User not found immediately, waiting for auth state change...');
-        // onAuthStateChange должен обработать это, но дадим ему время
+        // onAuthStateChange should handle this, but give it time
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Проверим еще раз
@@ -2028,125 +2028,6 @@ async function handleDeleteUser(userEmail) {
   }
 }
 
-// Admin export (with user selection)
-async function handleAdminExport() {
-  if (!supabaseClient) {
-    showToast('Supabase client not initialized', 'error', 'Error');
-    return;
-  }
-  
-  try {
-    const selectedCard = document.querySelector('.user-card.selected');
-    const email = selectedCard ? selectedCard.dataset.email : null;
-    
-    // Получаем логи
-    let logsQuery = supabaseClient
-      .from('logs')
-      .select('*')
-      .order('date', { ascending: false });
-    
-    if (email) {
-      logsQuery = logsQuery.eq('user_email', email);
-    }
-    
-    const { data: logsData, error: logsError } = await logsQuery;
-    if (logsError) throw logsError;
-    
-    // Получаем всех пользователей для маппинга
-    const { data: usersData, error: usersError } = await supabaseClient
-      .from('users')
-      .select('*');
-    
-    if (usersError) throw usersError;
-    
-    // Создаем маппинг email -> user
-    const usersMap = {};
-    (usersData || []).forEach(user => {
-      usersMap[user.email] = user;
-    });
-    
-    // Формируем CSV
-    let csv = 'Date,Employee,Email,Type,Actual (hrs),Credited,Comment\n';
-    
-    (logsData || []).forEach(log => {
-      const dateObj = new Date(log.date);
-      const formattedDate = dateObj.getDate().toString().padStart(2, '0') + '-' + 
-                           (dateObj.getMonth() + 1).toString().padStart(2, '0') + '-' + 
-                           dateObj.getFullYear();
-      
-      const user = usersMap[log.user_email];
-      const userName = user ? user.name : log.user_email;
-      const userEmail = log.user_email;
-      
-      csv += `"${formattedDate}","${userName}","${userEmail}","${log.type === 'overtime' ? 'Overtime' : 'Time Off'}","${log.fact_hours}","${log.credited_hours}","${log.comment || ''}"\n`;
-    });
-    
-    // Создаем и скачиваем файл
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', email ? `overtime_report_${email.replace('@', '_at_')}.csv` : 'overtime_report_all.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showToast('Export completed', 'success');
-  } catch (error) {
-    console.error('Export error:', error);
-    showToast('Error exporting: ' + error.message, 'error', 'Error');
-  }
-}
-
-// User export
-async function handleUserExport() {
-  if (!supabaseClient) {
-    showToast('Supabase client not initialized', 'error', 'Error');
-    return;
-  }
-  
-  try {
-    const { data: logsData, error: logsError } = await supabaseClient
-      .from('logs')
-      .select('*')
-      .eq('user_email', currentUser.email)
-      .order('date', { ascending: false });
-    
-    if (logsError) throw logsError;
-    
-    // Формируем CSV
-    let csv = 'Date,Employee,Email,Type,Actual (hrs),Credited,Comment\n';
-    
-    (logsData || []).forEach(log => {
-      const dateObj = new Date(log.date);
-      const formattedDate = dateObj.getDate().toString().padStart(2, '0') + '-' + 
-                           (dateObj.getMonth() + 1).toString().padStart(2, '0') + '-' + 
-                           dateObj.getFullYear();
-      
-      const userName = currentUser.name;
-      const userEmail = currentUser.email;
-      
-      csv += `"${formattedDate}","${userName}","${userEmail}","${log.type === 'overtime' ? 'Overtime' : 'Time Off'}","${log.fact_hours}","${log.credited_hours}","${log.comment || ''}"\n`;
-    });
-    
-    // Создаем и скачиваем файл
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `overtime_report_${currentUser.email.replace('@', '_at_')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    showToast('Export completed', 'success');
-  } catch (error) {
-    console.error('Export error:', error);
-    showToast('Error exporting: ' + error.message, 'error', 'Error');
-  }
-}
 
 // Update credited hours preview (user form)
 function updateCreditedPreview() {
