@@ -302,20 +302,27 @@ async function restoreUserFromStorage() {
       if (supabaseClient) {
         const { data: { session }, error } = await supabaseClient.auth.getSession();
         
-        if (session && !error && session.user.email === parsedUser.email) {
+        // Нормализуем email для сравнения
+        const sessionEmail = session?.user?.email?.toLowerCase().trim();
+        const parsedEmail = parsedUser.email?.toLowerCase().trim();
+        
+        if (session && !error && sessionEmail === parsedEmail) {
           // Сессия валидна, используем сохраненного пользователя
           currentUser = parsedUser;
           showMainApp();
           loadData();
+          console.log('User restored from localStorage:', currentUser.email);
           return true;
         } else {
           // Сессия истекла, но попробуем обновить токен
           try {
             const { data: { session: refreshedSession }, error: refreshError } = await supabaseClient.auth.refreshSession();
-            if (refreshedSession && !refreshError && refreshedSession.user.email === parsedUser.email) {
+            const refreshedEmail = refreshedSession?.user?.email?.toLowerCase().trim();
+            if (refreshedSession && !refreshError && refreshedEmail === parsedEmail) {
               currentUser = parsedUser;
               showMainApp();
               loadData();
+              console.log('User restored after token refresh:', currentUser.email);
               return true;
             }
           } catch (refreshErr) {
