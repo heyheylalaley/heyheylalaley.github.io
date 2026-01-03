@@ -379,53 +379,68 @@ async function checkSupabaseSession() {
   }
 }
 
-// Restore user from localStorage
+// Restore user from localStorage or session
 async function restoreUserFromStorage() {
-  const savedUser = localStorage.getItem('user');
-  if (savedUser) {
-    try {
-      const parsedUser = JSON.parse(savedUser);
+  if (!supabaseClient) return false;
+  
+  try {
+    // First check for valid Supabase session
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    
+    if (session && !error) {
+      const sessionEmail = session.user.email.toLowerCase().trim();
       
-      // Check if Supabase session is still valid
-      if (supabaseClient) {
-        const { data: { session }, error } = await supabaseClient.auth.getSession();
+      // Try to find user in database
+      const userData = await findUserByEmail(sessionEmail);
+      
+      if (userData) {
+        currentUser = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          role: userData.role
+        };
+        localStorage.setItem('user', JSON.stringify(currentUser));
+        showMainApp();
+        loadData();
+        console.log('User restored from session:', currentUser.email);
+        return true;
+      }
+    }
+    
+    // Try to refresh the session
+    try {
+      const { data: { session: refreshedSession }, error: refreshError } = await supabaseClient.auth.refreshSession();
+      
+      if (refreshedSession && !refreshError) {
+        const sessionEmail = refreshedSession.user.email.toLowerCase().trim();
+        const userData = await findUserByEmail(sessionEmail);
         
-        // Normalize email for comparison
-        const sessionEmail = session?.user?.email?.toLowerCase().trim();
-        const parsedEmail = parsedUser.email?.toLowerCase().trim();
-        
-        if (session && !error && sessionEmail === parsedEmail) {
-          // Session is valid, use saved user
-          currentUser = parsedUser;
+        if (userData) {
+          currentUser = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role
+          };
+          localStorage.setItem('user', JSON.stringify(currentUser));
           showMainApp();
           loadData();
-          console.log('User restored from localStorage:', currentUser.email);
+          console.log('User restored after token refresh:', currentUser.email);
           return true;
-        } else {
-          // Session expired, but try to refresh token
-          try {
-            const { data: { session: refreshedSession }, error: refreshError } = await supabaseClient.auth.refreshSession();
-            const refreshedEmail = refreshedSession?.user?.email?.toLowerCase().trim();
-            if (refreshedSession && !refreshError && refreshedEmail === parsedEmail) {
-              currentUser = parsedUser;
-              showMainApp();
-              loadData();
-              console.log('User restored after token refresh:', currentUser.email);
-              return true;
-            }
-          } catch (refreshErr) {
-            console.log('Could not refresh session:', refreshErr);
-          }
         }
       }
-      
-      // If session is not valid, remove saved user
-      localStorage.removeItem('user');
-    } catch (e) {
-      console.error('Error parsing saved user:', e);
-      localStorage.removeItem('user');
+    } catch (refreshErr) {
+      console.log('Could not refresh session:', refreshErr);
     }
+    
+    // No valid session - clear localStorage
+    localStorage.removeItem('user');
+  } catch (e) {
+    console.error('Error restoring user:', e);
+    localStorage.removeItem('user');
   }
+  
   return false;
 }
 
@@ -715,15 +730,9 @@ async function handleEmailLogin(e) {
     loginButton.textContent = 'Signing in...';
   }
   
-  // Safety timeout - if login takes more than 10 seconds, reset state and sign out
-  const safetyTimeout = setTimeout(async () => {
-    console.warn('Login timeout - resetting state and signing out');
-    // Sign out to clear the auth state and prevent re-processing loops
-    try {
-      await supabaseClient.auth.signOut();
-    } catch (e) {
-      console.error('Error signing out on timeout:', e);
-    }
+  // Safety timeout - if login takes more than 10 seconds, reset state
+  const safetyTimeout = setTimeout(() => {
+    console.warn('Login timeout - resetting state');
     isLoggingIn = false;
     emailPasswordLoginInProgress = false;
     hideLoading();
@@ -835,10 +844,43 @@ async function handleEmailLogin(e) {
         
         return; // Exit, login successful
       } else {
-        // User not found in database - sign out and show error
-        console.error('User authenticated but not found in database');
-        await supabaseClient.auth.signOut();
-        showToast('Account error. Please contact administrator or try again.', 'error', 'Login Error');
+        // User not found in database - create user record
+        console.warn('User authenticated but not found in database, creating user...');
+        const userName = authData.user.user_metadata?.full_name || 
+                        authData.user.user_metadata?.name || 
+                        normalizedEmail.split('@')[0];
+        
+        try {
+          const { data: newUser, error: createError } = await supabaseClient
+            .from('users')
+            .insert({ email: normalizedEmail, name: userName, role: 'user' })
+            .select()
+            .single();
+          
+          if (newUser && !createError) {
+            currentUser = {
+              id: newUser.id,
+              name: newUser.name,
+              email: newUser.email,
+              role: newUser.role
+            };
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            
+            clearTimeout(safetyTimeout);
+            hideLoading();
+            isLoggingIn = false;
+            emailPasswordLoginInProgress = false;
+            
+            showMainApp();
+            loadData();
+            showToast('Login successful!', 'success');
+            return;
+          }
+        } catch (e) {
+          console.error('Error creating user:', e);
+        }
+        
+        showToast('Account setup error. Please try again or contact administrator.', 'error', 'Login Error');
         return;
       }
     }
