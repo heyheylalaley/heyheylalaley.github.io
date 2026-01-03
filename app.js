@@ -73,7 +73,7 @@ async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
   
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      // Сначала пробуем точный поиск
+      // First try exact search
       let { data: userData, error: userError } = await supabaseClient
         .from('users')
         .select('*')
@@ -136,10 +136,10 @@ function setupAuthListener() {
         // Wait a bit for trigger to create user
         await new Promise(resolve => setTimeout(resolve, 300));
         
-        // Нормализуем email для поиска
+        // Normalize email for search
         const normalizedEmail = session.user.email.toLowerCase().trim();
         
-        // Ищем пользователя с повторными попытками
+        // Find user with retry attempts
         const userData = await findUserByEmail(normalizedEmail);
         
         if (userData) {
@@ -216,7 +216,7 @@ async function checkSupabaseSession() {
   
   if (!supabaseClient) {
     console.error('Supabase client not initialized');
-    // Попробуем восстановить из localStorage
+    // Try to restore from localStorage
     await restoreUserFromStorage();
     return;
   }
@@ -257,10 +257,10 @@ async function checkSupabaseSession() {
     // Handle OAuth callback (if hash in URL with token)
     // Supabase automatically processes token from hash when calling getSession()
     if (window.location.hash && window.location.hash.includes('access_token')) {
-      // Подождем немного, чтобы Supabase обработал токен
+      // Wait a bit for Supabase to process token
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      // Проверим сессию снова после обработки токена
+      // Check session again after token processing
       const { data: { session: newSession }, error: sessionError } = await supabaseClient.auth.getSession();
       
       if (newSession && !sessionError && !currentUser) {
@@ -287,7 +287,7 @@ async function checkSupabaseSession() {
           showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
         }
         
-        // Убираем hash из URL
+        // Remove hash from URL
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     } else if (window.location.hash === '#' && !currentUser) {
@@ -2123,7 +2123,7 @@ function resetAdminForm() {
   updateAdminCreditedPreview();
 }
 
-// Выход
+// Logout
 async function logout() {
   if (supabaseClient) {
     await supabaseClient.auth.signOut();
