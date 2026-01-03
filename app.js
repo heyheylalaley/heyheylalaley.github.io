@@ -1,23 +1,23 @@
-// Конфигурация Supabase
+// Supabase Configuration
 const CONFIG = {
   SUPABASE_URL: 'https://qwtwezxoodqfmdqpzkkl.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_iW0DJWq84mfMA30kA_HDOg_Fx99JPKU',
   GOOGLE_CLIENT_ID: '821999196894-20d8semsbtdp3dcpu4qf2p1h0u4okb39.apps.googleusercontent.com'
 };
 
-// Инициализация Supabase клиента
+// Initialize Supabase client
 let supabaseClient = null;
 if (typeof supabase !== 'undefined') {
   supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
     auth: {
-      persistSession: true, // Сохранять сессию в localStorage
-      autoRefreshToken: true, // Автоматически обновлять токен
-      detectSessionInUrl: true // Автоматически обнаруживать сессию в URL
+      persistSession: true, // Save session in localStorage
+      autoRefreshToken: true, // Automatically refresh token
+      detectSessionInUrl: true // Automatically detect session in URL
     }
   });
 }
 
-// Глобальное состояние
+// Global state
 let currentUser = null;
 let currentLogs = [];
 let currentUsers = [];
@@ -27,36 +27,36 @@ let filteredLogs = []; // For search functionality
 let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 let sortOrder = 'desc'; // Sort order: 'desc' (newest first) or 'asc' (oldest first)
 
-// Флаги для предотвращения множественных вызовов
-let isCheckingSession = false; // Флаг проверки сессии
-let isLoggingIn = false; // Флаг процесса входа
-let sessionCheckTimeout = null; // Таймаут для проверки сессии
+// Flags to prevent multiple calls
+let isCheckingSession = false; // Session check flag
+let isLoggingIn = false; // Login process flag
+let sessionCheckTimeout = null; // Session check timeout
 
-// Инициализация при загрузке
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
   initializeGoogleSignIn();
   initializeAuthTabs();
   setupEventListeners();
   setupAuthListener();
   
-  // Debounce проверки сессии при загрузке страницы
-  // Предотвращаем множественные проверки при быстром обновлении (F5 спам)
+  // Debounce session check on page load
+  // Prevent multiple checks on rapid refresh (F5 spam)
   if (sessionCheckTimeout) {
     clearTimeout(sessionCheckTimeout);
   }
   
   sessionCheckTimeout = setTimeout(() => {
     checkSupabaseSession();
-  }, 100); // Небольшая задержка для предотвращения race conditions
+  }, 100); // Small delay to prevent race conditions
 });
 
-// Предотвращаем множественные проверки сессии при обновлении страницы
+// Prevent multiple session checks on page refresh
 let lastSessionCheck = 0;
-const SESSION_CHECK_COOLDOWN = 2000; // 2 секунды между проверками
+const SESSION_CHECK_COOLDOWN = 2000; // 2 seconds between checks
 
-// Перехватываем уход со страницы
+// Intercept page unload
 window.addEventListener('beforeunload', () => {
-  // Очищаем таймаут при уходе со страницы
+  // Clear timeout on page unload
   if (sessionCheckTimeout) {
     clearTimeout(sessionCheckTimeout);
   }
@@ -64,7 +64,7 @@ window.addEventListener('beforeunload', () => {
   isLoggingIn = false;
 });
 
-// Функция для поиска пользователя с повторными попытками
+// Function to find user with retry attempts
 async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
   if (!supabaseClient || !email) return null;
   
@@ -80,7 +80,7 @@ async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
         .eq('email', email)
         .maybeSingle();
       
-      // Если не нашли, пробуем без учета регистра через получение всех пользователей
+      // If not found, try case-insensitive search by getting all users
       if (!userData || userError) {
         console.log('Exact match not found, trying case-insensitive search...');
         const { data: allUsers, error: allError } = await supabaseClient
@@ -102,7 +102,7 @@ async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
         return userData;
       }
       
-      // Если это не последняя попытка, ждем перед следующей
+      // If this is not the last attempt, wait before next one
       if (attempt < maxAttempts) {
         console.log(`User not found, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})...`);
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -123,7 +123,7 @@ async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
   return null;
 }
 
-// Настройка слушателя изменений авторизации
+// Setup authentication state change listener
 function setupAuthListener() {
   if (!supabaseClient) return;
   
@@ -131,9 +131,9 @@ function setupAuthListener() {
     console.log('Auth state changed:', event, session);
     
     if (event === 'SIGNED_IN' && session) {
-      // Пользователь успешно вошел
+      // User successfully signed in
       try {
-        // Ждем немного, чтобы триггер успел создать пользователя
+        // Wait a bit for trigger to create user
         await new Promise(resolve => setTimeout(resolve, 300));
         
         // Нормализуем email для поиска
@@ -154,13 +154,13 @@ function setupAuthListener() {
           loadData();
           showToast('Login successful', 'success');
           
-          // Убираем hash из URL после успешного входа
+          // Remove hash from URL after successful login
           if (window.location.hash) {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         } else {
           console.error('User not found. Session email:', session.user.email, 'Normalized:', normalizedEmail);
-          // Попробуем создать пользователя, если его нет
+          // Try to create user if not found
           const userName = session.user.user_metadata?.full_name || 
                           session.user.user_metadata?.name || 
                           normalizedEmail.split('@')[0];
@@ -195,7 +195,7 @@ function setupAuthListener() {
         showToast('Error loading user data: ' + error.message, 'error');
       }
     } else if (event === 'SIGNED_OUT') {
-      // Пользователь вышел
+      // User signed out
       currentUser = null;
       currentLogs = [];
       currentUsers = [];
@@ -206,9 +206,9 @@ function setupAuthListener() {
   });
 }
 
-// Проверка сессии Supabase
+// Check Supabase session
 async function checkSupabaseSession() {
-  // Предотвращаем множественные одновременные проверки
+  // Prevent multiple simultaneous checks
   if (isCheckingSession) {
     console.log('Session check already in progress, skipping...');
     return;
@@ -224,12 +224,12 @@ async function checkSupabaseSession() {
   isCheckingSession = true;
   
   try {
-    // Проверяем существующую сессию (Supabase автоматически восстанавливает из localStorage)
+    // Check existing session (Supabase automatically restores from localStorage)
     const { data: { session }, error } = await supabaseClient.auth.getSession();
     
     if (session && !error) {
       console.log('Session found, loading user data...');
-      // Получаем информацию о пользователе из таблицы users
+      // Get user information from users table
       const userData = await findUserByEmail(session.user.email, 3, 200);
       
       if (userData) {
@@ -245,17 +245,17 @@ async function checkSupabaseSession() {
         console.log('User restored from session:', currentUser.email);
       } else {
         console.warn('Session exists but user not found in database');
-        // Попробуем восстановить из localStorage как fallback
+        // Try to restore from localStorage as fallback
         await restoreUserFromStorage();
       }
     } else {
-      // Нет активной сессии, попробуем восстановить из localStorage
+      // No active session, try to restore from localStorage
       console.log('No active session, trying to restore from storage...');
       await restoreUserFromStorage();
     }
     
-    // Обработка OAuth callback (если есть hash в URL с токеном)
-    // Supabase автоматически обрабатывает токен из hash при вызове getSession()
+    // Handle OAuth callback (if hash in URL with token)
+    // Supabase automatically processes token from hash when calling getSession()
     if (window.location.hash && window.location.hash.includes('access_token')) {
       // Подождем немного, чтобы Supabase обработал токен
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -291,8 +291,8 @@ async function checkSupabaseSession() {
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     } else if (window.location.hash === '#' && !currentUser) {
-      // Если hash пустой (#), но сессия может быть установлена после OAuth
-      // Проверим сессию еще раз
+      // If hash is empty (#), but session might be set after OAuth
+      // Check session again
       await new Promise(resolve => setTimeout(resolve, 300));
       const { data: { session: finalSession }, error: finalError } = await supabaseClient.auth.getSession();
       
@@ -314,7 +314,7 @@ async function checkSupabaseSession() {
           loadData();
           showToast('Login successful', 'success');
           
-          // Убираем hash из URL
+          // Remove hash from URL
           window.history.replaceState({}, document.title, window.location.pathname);
         } else {
           console.error('User not found. Session email:', finalSession.user.email);
@@ -323,37 +323,37 @@ async function checkSupabaseSession() {
     }
   } catch (error) {
     console.error('Session check error:', error);
-    // Проверяем сохранённую сессию как fallback
+    // Check saved session as fallback
     await restoreUserFromStorage();
   } finally {
     isCheckingSession = false;
   }
 }
 
-// Восстановление пользователя из localStorage
+// Restore user from localStorage
 async function restoreUserFromStorage() {
   const savedUser = localStorage.getItem('user');
   if (savedUser) {
     try {
       const parsedUser = JSON.parse(savedUser);
       
-      // Проверяем, что сессия Supabase все еще валидна
+      // Check if Supabase session is still valid
       if (supabaseClient) {
         const { data: { session }, error } = await supabaseClient.auth.getSession();
         
-        // Нормализуем email для сравнения
+        // Normalize email for comparison
         const sessionEmail = session?.user?.email?.toLowerCase().trim();
         const parsedEmail = parsedUser.email?.toLowerCase().trim();
         
         if (session && !error && sessionEmail === parsedEmail) {
-          // Сессия валидна, используем сохраненного пользователя
+          // Session is valid, use saved user
           currentUser = parsedUser;
           showMainApp();
           loadData();
           console.log('User restored from localStorage:', currentUser.email);
           return true;
         } else {
-          // Сессия истекла, но попробуем обновить токен
+          // Session expired, but try to refresh token
           try {
             const { data: { session: refreshedSession }, error: refreshError } = await supabaseClient.auth.refreshSession();
             const refreshedEmail = refreshedSession?.user?.email?.toLowerCase().trim();
@@ -370,7 +370,7 @@ async function restoreUserFromStorage() {
         }
       }
       
-      // Если сессия не валидна, удаляем сохраненного пользователя
+      // If session is not valid, remove saved user
       localStorage.removeItem('user');
     } catch (e) {
       console.error('Error parsing saved user:', e);
@@ -380,7 +380,7 @@ async function restoreUserFromStorage() {
   return false;
 }
 
-// Инициализация вкладок авторизации
+// Initialize authentication tabs
 function initializeAuthTabs() {
   const loginTabBtn = document.getElementById('loginTabBtn');
   const registerTabBtn = document.getElementById('registerTabBtn');
@@ -404,7 +404,7 @@ function initializeAuthTabs() {
   }
 }
 
-// Инициализация Google Sign-In через Supabase OAuth
+// Initialize Google Sign-In via Supabase OAuth
 function initializeGoogleSignIn() {
   const googleSignInButton = `
     <button class="google-signin-btn" style="
@@ -439,14 +439,14 @@ function initializeGoogleSignIn() {
     </button>
   `;
   
-  // Кнопка для формы входа
+  // Button for login form
   const buttonContainer = document.getElementById('googleSignInButton');
   if (buttonContainer) {
     buttonContainer.innerHTML = googleSignInButton;
     buttonContainer.querySelector('.google-signin-btn').addEventListener('click', handleGoogleSignIn);
   }
   
-  // Кнопка для формы регистрации
+  // Button for registration form
   const buttonContainerRegister = document.getElementById('googleSignInButtonRegister');
   if (buttonContainerRegister) {
     buttonContainerRegister.innerHTML = googleSignInButton;
@@ -454,7 +454,7 @@ function initializeGoogleSignIn() {
   }
 }
 
-// Обработка авторизации через Google OAuth (Supabase)
+// Handle authentication via Google OAuth (Supabase)
 async function handleGoogleSignIn() {
   if (!supabaseClient) {
     showToast('Supabase client not initialized', 'error', 'Error');
@@ -463,8 +463,8 @@ async function handleGoogleSignIn() {
   
   showLoading();
   try {
-    // Используем Google OAuth через Supabase
-    // Используем явный URL вместо window.location.origin для избежания проблем с парсингом
+    // Use Google OAuth via Supabase
+    // Use explicit URL instead of window.location.origin to avoid parsing issues
     const redirectUrl = 'https://heyheylalaley.github.io';
     const { data, error } = await supabaseClient.auth.signInWithOAuth({
       provider: 'google',
@@ -479,7 +479,7 @@ async function handleGoogleSignIn() {
     
     if (error) throw error;
     
-    // Перенаправление на Google OAuth
+    // Redirect to Google OAuth
     if (data.url) {
       window.location.href = data.url;
     }
@@ -490,7 +490,7 @@ async function handleGoogleSignIn() {
   }
 }
 
-// Обработка регистрации по email/password
+// Handle email/password registration
 async function handleEmailRegister(e) {
   e.preventDefault();
   
@@ -621,11 +621,11 @@ async function handleEmailRegister(e) {
   }
 }
 
-// Обработка входа по email/password
+// Handle email/password login
 async function handleEmailLogin(e) {
   e.preventDefault();
   
-  // Предотвращаем множественные попытки входа
+  // Prevent multiple login attempts
   if (isLoggingIn) {
     console.log('Login already in progress, please wait...');
     return;
@@ -656,7 +656,7 @@ async function handleEmailLogin(e) {
   isLoggingIn = true;
   showLoading();
   
-  // Отключаем кнопку входа
+  // Disable login button
   const loginButton = e.target.querySelector('button[type="submit"]') || 
                       document.querySelector('#emailLoginForm button[type="submit"]');
   if (loginButton) {
@@ -739,28 +739,28 @@ async function handleEmailLogin(e) {
         };
         localStorage.setItem('user', JSON.stringify(currentUser));
         
-        // Скрываем loading и обновляем UI
+        // Hide loading and update UI
         hideLoading();
         isLoggingIn = false;
         
-        // Включаем кнопку входа обратно
+        // Re-enable login button
         const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
         if (loginButton) {
           loginButton.disabled = false;
           loginButton.textContent = 'Sign In';
         }
         
-        // Показываем главное приложение
+        // Show main application
         showMainApp();
         loadData();
         showToast('Login successful!', 'success');
         
-        // Убираем hash из URL если есть
+        // Remove hash from URL if present
         if (window.location.hash) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
         
-        return; // Выходим, так как вход успешен
+        return; // Exit, login successful
       } else {
         // Если пользователь все еще не найден, подождем еще
         console.warn('User not found immediately, waiting for auth state change...');
@@ -810,7 +810,7 @@ async function handleEmailLogin(e) {
     }
     showToast(errorMessage, 'error', 'Login Error');
   } finally {
-    // Убеждаемся, что флаги сброшены и UI обновлен
+    // Make sure flags are reset and UI is updated
     if (isLoggingIn) {
       isLoggingIn = false;
       hideLoading();
@@ -948,6 +948,16 @@ function setupEventListeners() {
         currentDateFilter = btn.dataset.filter;
         filterUserLogs();
       });
+    });
+  }
+  
+  // Sort toggle - user view
+  const userSortToggle = document.getElementById('userSortToggle');
+  if (userSortToggle) {
+    userSortToggle.addEventListener('click', () => {
+      sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
+      updateSortButton('user');
+      filterUserLogs();
     });
   }
   
@@ -1122,14 +1132,14 @@ function setupEventListeners() {
     try {
       logDate.valueAsDate = new Date();
     } catch (e) {
-      // Игнорируем ошибку, если поле не поддерживает valueAsDate
+      // Ignore error if field doesn't support valueAsDate
     }
   }
   if (adminLogDate) {
     try {
       adminLogDate.valueAsDate = new Date();
     } catch (e) {
-      // Игнорируем ошибку, если поле не поддерживает valueAsDate
+      // Ignore error if field doesn't support valueAsDate
     }
   }
   
@@ -1138,9 +1148,6 @@ function setupEventListeners() {
   if (adminAddLogForm) adminAddLogForm.addEventListener('submit', handleAdminAddLog);
   
   
-  // Export buttons
-  const userExportBtn = document.getElementById('userExportBtn');
-  if (userExportBtn) userExportBtn.addEventListener('click', handleUserExport);
   
   // Search input for user view
   const userSearchInput = document.getElementById('userSearchInput');
@@ -1209,7 +1216,7 @@ async function loadData() {
   hideSkeletonLoaders();
 }
 
-// Загрузка логов пользователя
+// Load user logs
 async function loadUserLogs() {
   if (!supabaseClient) throw new Error('Supabase client not initialized');
   
@@ -1222,7 +1229,7 @@ async function loadUserLogs() {
     
     if (error) throw error;
     
-    // Преобразуем формат данных для совместимости
+    // Transform data format for compatibility
     currentLogs = (data || []).map(log => ({
       id: log.id,
       userEmail: log.user_email,
@@ -1240,7 +1247,7 @@ async function loadUserLogs() {
   }
 }
 
-// Загрузка всех логов (админ)
+// Load all logs (admin)
 async function loadAllLogs() {
   if (!supabaseClient) throw new Error('Supabase client not initialized');
   
@@ -1252,7 +1259,7 @@ async function loadAllLogs() {
     
     if (error) throw error;
     
-    // Преобразуем формат данных для совместимости
+    // Transform data format for compatibility
     currentLogs = (data || []).map(log => ({
       id: log.id,
       userEmail: log.user_email,
@@ -1270,7 +1277,7 @@ async function loadAllLogs() {
   }
 }
 
-// Загрузка пользователей (админ)
+// Load users (admin)
 async function loadUsers() {
   if (!supabaseClient) throw new Error('Supabase client not initialized');
   
@@ -1288,10 +1295,10 @@ async function loadUsers() {
   }
 }
 
-// Загрузка настроек
+// Load settings
 async function loadSettings() {
   if (!supabaseClient) {
-    // Используем значение по умолчанию
+    // Use default value
     return;
   }
   
