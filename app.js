@@ -976,11 +976,9 @@ function setupEventListeners() {
   const quickAddCustomBtn = document.getElementById('quickAddCustomBtn');
   if (quickAddCustomBtn) {
     quickAddCustomBtn.addEventListener('click', () => {
-      const addFormToggle = document.getElementById('addFormToggle');
       const addLogForm = document.getElementById('addLogForm');
-      if (addFormToggle && addLogForm) {
+      if (addLogForm) {
         addLogForm.classList.remove('hidden');
-        addFormToggle.classList.add('hidden');
         document.getElementById('logHours')?.focus();
       }
     });
@@ -1001,11 +999,9 @@ function setupEventListeners() {
   const adminQuickAddCustomBtn = document.getElementById('adminQuickAddCustomBtn');
   if (adminQuickAddCustomBtn) {
     adminQuickAddCustomBtn.addEventListener('click', () => {
-      const adminAddFormToggle = document.getElementById('adminAddFormToggle');
       const adminAddLogForm = document.getElementById('adminAddLogForm');
-      if (adminAddFormToggle && adminAddLogForm) {
+      if (adminAddLogForm) {
         adminAddLogForm.classList.remove('hidden');
-        adminAddFormToggle.classList.add('hidden');
         document.getElementById('adminLogHours')?.focus();
       }
     });
@@ -1160,42 +1156,24 @@ function setupEventListeners() {
     });
   });
   
-  // User form
-  const addFormToggle = document.getElementById('addFormToggle');
+  // User form cancel button
   const addLogForm = document.getElementById('addLogForm');
   const cancelFormBtn = document.getElementById('cancelFormBtn');
   
-  if (addFormToggle && addLogForm) {
-    addFormToggle.addEventListener('click', () => {
-      addLogForm.classList.remove('hidden');
-      addFormToggle.classList.add('hidden');
-    });
-  }
-  
-  if (cancelFormBtn && addLogForm && addFormToggle) {
+  if (cancelFormBtn && addLogForm) {
     cancelFormBtn.addEventListener('click', () => {
       addLogForm.classList.add('hidden');
-      addFormToggle.classList.remove('hidden');
       resetForm();
     });
   }
   
-  // Admin form
-  const adminAddFormToggle = document.getElementById('adminAddFormToggle');
+  // Admin form cancel button
   const adminAddLogForm = document.getElementById('adminAddLogForm');
   const adminCancelFormBtn = document.getElementById('adminCancelFormBtn');
   
-  if (adminAddFormToggle && adminAddLogForm) {
-    adminAddFormToggle.addEventListener('click', () => {
-      adminAddLogForm.classList.remove('hidden');
-      adminAddFormToggle.classList.add('hidden');
-    });
-  }
-  
-  if (adminCancelFormBtn && adminAddLogForm && adminAddFormToggle) {
+  if (adminCancelFormBtn && adminAddLogForm) {
     adminCancelFormBtn.addEventListener('click', () => {
       adminAddLogForm.classList.add('hidden');
-      adminAddFormToggle.classList.remove('hidden');
       resetAdminForm();
     });
   }
@@ -2157,7 +2135,6 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
   // Determine which form was used (user or admin)
   const isAdminForm = form && form.id === 'adminAddLogForm';
   const formEl = isAdminForm ? document.getElementById('adminAddLogForm') : document.getElementById('addLogForm');
-  const toggleEl = isAdminForm ? document.getElementById('adminAddFormToggle') : document.getElementById('addFormToggle');
   
   if (formEl) {
     formEl.style.opacity = '0';
@@ -2171,7 +2148,6 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
       formEl.classList.add('hidden');
       formEl.style.opacity = '';
       formEl.style.transform = '';
-      if (toggleEl) toggleEl.classList.remove('hidden');
     }, 200);
   }
   
