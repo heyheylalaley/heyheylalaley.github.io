@@ -768,15 +768,22 @@ async function handleEmailLogin(e) {
           loginButton.textContent = 'Sign In';
         }
         
-        // Show main application
+        // Show main application - force UI update
         showMainApp();
-        loadData();
+        await loadData(); // Wait for data to load
+        
+        // Force a small delay to ensure UI is updated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         showToast('Login successful!', 'success');
         
         // Remove hash from URL if present
         if (window.location.hash) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
+        
+        // Reset flag after UI is shown
+        emailPasswordLoginInProgress = false;
         
         return; // Exit, login successful
       } else {
