@@ -966,6 +966,18 @@ function setupEventListeners() {
     });
   }
   
+  // Sort toggle - admin view
+  const adminSortToggle = document.getElementById('adminSortToggle');
+  if (adminSortToggle) {
+    adminSortToggle.addEventListener('click', () => {
+      sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
+      updateSortButton('admin');
+      const selectedCard = document.querySelector('.user-card.selected');
+      const selectedEmail = selectedCard ? selectedCard.dataset.email : null;
+      filterAdminLogs(selectedEmail);
+    });
+  }
+  
   // Delete modal
   const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
   const deleteCancelBtn = document.getElementById('deleteCancelBtn');
