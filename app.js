@@ -378,21 +378,39 @@ function hideDeleteModal() {
   }
 }
 
-function showMultiplierModal() {
-  const modal = document.getElementById('multiplierModal');
-  const input = document.getElementById('multiplierInput');
-  if (modal && input) {
-    input.value = currentMultiplier;
+function showEditNameModal() {
+  const modal = document.getElementById('editNameModal');
+  const input = document.getElementById('nameInput');
+  if (modal && input && currentUser) {
+    input.value = currentUser.name;
     modal.classList.remove('hidden');
     input.focus();
     input.select();
   }
 }
 
-function hideMultiplierModal() {
-  const modal = document.getElementById('multiplierModal');
+function hideEditNameModal() {
+  const modal = document.getElementById('editNameModal');
   if (modal) {
     modal.classList.add('hidden');
+  }
+}
+
+function showDeleteUserModal(userEmail, userName) {
+  const modal = document.getElementById('deleteUserModal');
+  const message = document.getElementById('deleteUserMessage');
+  if (modal && message) {
+    message.textContent = `Are you sure you want to delete user "${userName}" (${userEmail})? This action cannot be undone and will delete all their logs.`;
+    modal.dataset.userEmail = userEmail;
+    modal.classList.remove('hidden');
+  }
+}
+
+function hideDeleteUserModal() {
+  const modal = document.getElementById('deleteUserModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    delete modal.dataset.userEmail;
   }
 }
 
@@ -453,25 +471,35 @@ function setupEventListeners() {
     deleteCancelBtn.addEventListener('click', hideDeleteModal);
   }
   
-  // Multiplier modal
-  const multiplierConfirmBtn = document.getElementById('multiplierConfirmBtn');
-  const multiplierCancelBtn = document.getElementById('multiplierCancelBtn');
-  if (multiplierConfirmBtn) {
-    multiplierConfirmBtn.addEventListener('click', () => {
-      const input = document.getElementById('multiplierInput');
-      if (input && input.value) {
-        const multiplier = parseFloat(input.value);
-        if (!isNaN(multiplier) && multiplier > 0) {
-          handleUpdateMultiplier(multiplier);
-          hideMultiplierModal();
-        } else {
-          showToast('Please enter a valid number', 'error');
-        }
+  // Edit name modal
+  const editNameBtn = document.getElementById('editNameBtn');
+  const nameConfirmBtn = document.getElementById('nameConfirmBtn');
+  const nameCancelBtn = document.getElementById('nameCancelBtn');
+  if (editNameBtn) {
+    editNameBtn.addEventListener('click', showEditNameModal);
+  }
+  if (nameConfirmBtn) {
+    nameConfirmBtn.addEventListener('click', handleUpdateName);
+  }
+  if (nameCancelBtn) {
+    nameCancelBtn.addEventListener('click', hideEditNameModal);
+  }
+
+  // Delete user modal
+  const deleteUserConfirmBtn = document.getElementById('deleteUserConfirmBtn');
+  const deleteUserCancelBtn = document.getElementById('deleteUserCancelBtn');
+  if (deleteUserConfirmBtn) {
+    deleteUserConfirmBtn.addEventListener('click', () => {
+      const modal = document.getElementById('deleteUserModal');
+      const userEmail = modal?.dataset.userEmail;
+      if (userEmail) {
+        handleDeleteUser(userEmail);
+        hideDeleteUserModal();
       }
     });
   }
-  if (multiplierCancelBtn) {
-    multiplierCancelBtn.addEventListener('click', hideMultiplierModal);
+  if (deleteUserCancelBtn) {
+    deleteUserCancelBtn.addEventListener('click', hideDeleteUserModal);
   }
   
   // Close modals on backdrop click
@@ -587,9 +615,6 @@ function setupEventListeners() {
   if (addLogForm) addLogForm.addEventListener('submit', handleAddLog);
   if (adminAddLogForm) adminAddLogForm.addEventListener('submit', handleAdminAddLog);
   
-  // Admin buttons
-  const settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.addEventListener('click', showMultiplierModal);
   
   // Export buttons
   const userExportBtn = document.getElementById('userExportBtn');
@@ -762,11 +787,11 @@ async function loadSettings() {
     
     if (settings.overtimeMultiplier) {
       currentMultiplier = parseFloat(settings.overtimeMultiplier) || 1.5;
-      const multiplierDisplay = document.getElementById('multiplierDisplay');
-      const userMultiplier = document.getElementById('userMultiplier');
-      if (multiplierDisplay) multiplierDisplay.textContent = currentMultiplier;
-      if (userMultiplier) userMultiplier.textContent = currentMultiplier;
+    } else {
+      currentMultiplier = 1.5; // Always 1.5 from DB
     }
+    const userMultiplier = document.getElementById('userMultiplier');
+    if (userMultiplier) userMultiplier.textContent = currentMultiplier;
   } catch (error) {
     console.error('Settings loading error:', error);
     // Don't throw error, use default value
@@ -1026,6 +1051,7 @@ function renderUsersList() {
   
   container.innerHTML = userBalances.map(user => {
     const balance = user.balance;
+    const isCurrentUser = user.email === currentUser.email;
     return `
       <div class="user-card" data-email="${user.email}">
         <div class="user-card-content">
@@ -1040,13 +1066,31 @@ function renderUsersList() {
             <div class="user-balance-label">balance</div>
           </div>
         </div>
+        ${!isCurrentUser ? `
+          <button class="user-delete-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Delete user">
+            🗑️
+          </button>
+        ` : ''}
       </div>
     `;
   }).join('');
   
   // Click handlers for user cards
   container.querySelectorAll('.user-card').forEach(card => {
-    card.addEventListener('click', () => {
+    const deleteBtn = card.querySelector('.user-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const email = deleteBtn.dataset.email;
+        const name = deleteBtn.dataset.name;
+        showDeleteUserModal(email, name);
+      });
+    }
+    
+    card.addEventListener('click', (e) => {
+      // Don't trigger selection if clicking delete button
+      if (e.target.closest('.user-delete-btn')) return;
+      
       const email = card.dataset.email;
       const isSelected = card.classList.contains('selected');
       
@@ -1353,51 +1397,93 @@ async function handleDeleteLog(logId) {
   }
 }
 
-// Update multiplier with optimistic update
-async function handleUpdateMultiplier(multiplier) {
-  if (!multiplier) return;
-  
-  if (isNaN(multiplier) || multiplier <= 0) {
-    showToast('Invalid value', 'error');
+// Update user name
+async function handleUpdateName() {
+  const input = document.getElementById('nameInput');
+  if (!input || !input.value.trim()) {
+    showToast('Please enter a name', 'warning');
     return;
   }
   
-  // Optimistic update - update UI immediately
-  const oldMultiplier = currentMultiplier;
-  currentMultiplier = multiplier;
-  document.getElementById('multiplierDisplay').textContent = multiplier;
-  if (document.getElementById('userMultiplier')) {
-    document.getElementById('userMultiplier').textContent = multiplier;
-  }
-  if (document.getElementById('adminMultiplier')) {
-    document.getElementById('adminMultiplier').textContent = multiplier;
+  const newName = input.value.trim();
+  if (newName === currentUser.name) {
+    hideEditNameModal();
+    return;
   }
   
-  // Save to Supabase in background
   if (!supabaseClient) {
     showToast('Supabase client not initialized', 'error', 'Error');
     return;
   }
   
+  // Optimistic update
+  const oldName = currentUser.name;
+  currentUser.name = newName;
+  localStorage.setItem('user', JSON.stringify(currentUser));
+  
+  // Update UI
+  if (currentUser.role === 'admin') {
+    renderAdminView();
+  } else {
+    renderUserView();
+  }
+  hideEditNameModal();
+  
+  // Save to Supabase
   try {
     const { error } = await supabaseClient
-      .from('settings')
-      .upsert({ key: 'overtimeMultiplier', value: multiplier.toString() }, { onConflict: 'key' });
+      .from('users')
+      .update({ name: newName })
+      .eq('email', currentUser.email);
     
     if (error) throw error;
     
-    showToast('Multiplier successfully updated', 'success');
+    showToast('Name successfully updated', 'success');
+    await loadUsers(); // Reload users list for admin view
   } catch (error) {
-    // Rollback on error
-    currentMultiplier = oldMultiplier;
-    const multiplierDisplay = document.getElementById('multiplierDisplay');
-    const userMultiplier = document.getElementById('userMultiplier');
-    const adminMultiplier = document.getElementById('adminMultiplier');
-    if (multiplierDisplay) multiplierDisplay.textContent = oldMultiplier;
-    if (userMultiplier) userMultiplier.textContent = oldMultiplier;
-    if (adminMultiplier) adminMultiplier.textContent = oldMultiplier;
+    // Rollback
+    currentUser.name = oldName;
+    localStorage.setItem('user', JSON.stringify(currentUser));
+    if (currentUser.role === 'admin') {
+      renderAdminView();
+    } else {
+      renderUserView();
+    }
     console.error('Update error:', error);
-    showToast('Error updating: ' + error.message, 'error', 'Error');
+    showToast('Error updating name: ' + error.message, 'error', 'Error');
+  }
+}
+
+// Delete user (admin only)
+async function handleDeleteUser(userEmail) {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  if (userEmail === currentUser.email) {
+    showToast('You cannot delete your own account', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    // Delete user (this will cascade delete logs due to ON DELETE CASCADE)
+    const { error } = await supabaseClient
+      .from('users')
+      .delete()
+      .eq('email', userEmail);
+    
+    if (error) throw error;
+    
+    showToast('User successfully deleted', 'success');
+    
+    // Reload data
+    await loadUsers();
+    await loadAllLogs();
+    renderAdminView();
+  } catch (error) {
+    console.error('Delete user error:', error);
+    showToast('Error deleting user: ' + error.message, 'error', 'Error');
   }
 }
 
