@@ -343,7 +343,10 @@ function hideMultiplierModal() {
 // Setup event listeners
 function setupEventListeners() {
   // Logout
-  document.getElementById('logoutBtn').addEventListener('click', logout);
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', logout);
+  }
   
   // Refresh buttons
   const refreshBtn = document.getElementById('refreshBtn');
@@ -426,28 +429,44 @@ function setupEventListeners() {
   });
   
   // User form
-  document.getElementById('addFormToggle').addEventListener('click', () => {
-    document.getElementById('addLogForm').classList.remove('hidden');
-    document.getElementById('addFormToggle').classList.add('hidden');
-  });
+  const addFormToggle = document.getElementById('addFormToggle');
+  const addLogForm = document.getElementById('addLogForm');
+  const cancelFormBtn = document.getElementById('cancelFormBtn');
   
-  document.getElementById('cancelFormBtn').addEventListener('click', () => {
-    document.getElementById('addLogForm').classList.add('hidden');
-    document.getElementById('addFormToggle').classList.remove('hidden');
-    resetForm();
-  });
+  if (addFormToggle && addLogForm) {
+    addFormToggle.addEventListener('click', () => {
+      addLogForm.classList.remove('hidden');
+      addFormToggle.classList.add('hidden');
+    });
+  }
+  
+  if (cancelFormBtn && addLogForm && addFormToggle) {
+    cancelFormBtn.addEventListener('click', () => {
+      addLogForm.classList.add('hidden');
+      addFormToggle.classList.remove('hidden');
+      resetForm();
+    });
+  }
   
   // Admin form
-  document.getElementById('adminAddFormToggle').addEventListener('click', () => {
-    document.getElementById('adminAddLogForm').classList.remove('hidden');
-    document.getElementById('adminAddFormToggle').classList.add('hidden');
-  });
+  const adminAddFormToggle = document.getElementById('adminAddFormToggle');
+  const adminAddLogForm = document.getElementById('adminAddLogForm');
+  const adminCancelFormBtn = document.getElementById('adminCancelFormBtn');
   
-  document.getElementById('adminCancelFormBtn').addEventListener('click', () => {
-    document.getElementById('adminAddLogForm').classList.add('hidden');
-    document.getElementById('adminAddFormToggle').classList.remove('hidden');
-    resetAdminForm();
-  });
+  if (adminAddFormToggle && adminAddLogForm) {
+    adminAddFormToggle.addEventListener('click', () => {
+      adminAddLogForm.classList.remove('hidden');
+      adminAddFormToggle.classList.add('hidden');
+    });
+  }
+  
+  if (adminCancelFormBtn && adminAddLogForm && adminAddFormToggle) {
+    adminCancelFormBtn.addEventListener('click', () => {
+      adminAddLogForm.classList.add('hidden');
+      adminAddFormToggle.classList.remove('hidden');
+      // resetAdminForm(); // Функция не реализована, так как админ форма не используется
+    });
+  }
   
   // Type selection - user form
   const userForm = document.getElementById('addLogForm');
@@ -493,11 +512,22 @@ function setupEventListeners() {
   
   const logDate = document.getElementById('logDate');
   const adminLogDate = document.getElementById('adminLogDate');
-  if (logDate) logDate.valueAsDate = new Date();
-  if (adminLogDate) adminLogDate.valueAsDate = new Date();
+  if (logDate) {
+    try {
+      logDate.valueAsDate = new Date();
+    } catch (e) {
+      // Игнорируем ошибку, если поле не поддерживает valueAsDate
+    }
+  }
+  if (adminLogDate) {
+    try {
+      adminLogDate.valueAsDate = new Date();
+    } catch (e) {
+      // Игнорируем ошибку, если поле не поддерживает valueAsDate
+    }
+  }
   
-  // Form submission
-  const addLogForm = document.getElementById('addLogForm');
+  // Form submission (addLogForm уже объявлена выше)
   if (addLogForm) addLogForm.addEventListener('submit', handleAddLog);
   
   // Admin buttons
