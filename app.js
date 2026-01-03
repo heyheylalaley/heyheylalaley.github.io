@@ -691,6 +691,8 @@ async function handleEmailLogin(e) {
   // Normalize email (same as registration)
   const normalizedEmail = email.toLowerCase().trim();
   
+  // Set flag to prevent duplicate toast in onAuthStateChange
+  emailPasswordLoginInProgress = true;
   isLoggingIn = true;
   showLoading();
   
