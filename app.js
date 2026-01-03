@@ -26,13 +26,41 @@ let deleteLogId = null; // For delete modal
 let filteredLogs = []; // For search functionality
 let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 
+// Флаги для предотвращения множественных вызовов
+let isCheckingSession = false; // Флаг проверки сессии
+let isLoggingIn = false; // Флаг процесса входа
+let sessionCheckTimeout = null; // Таймаут для проверки сессии
+
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', () => {
   initializeGoogleSignIn();
   initializeAuthTabs();
   setupEventListeners();
   setupAuthListener();
-  checkSupabaseSession();
+  
+  // Debounce проверки сессии при загрузке страницы
+  // Предотвращаем множественные проверки при быстром обновлении (F5 спам)
+  if (sessionCheckTimeout) {
+    clearTimeout(sessionCheckTimeout);
+  }
+  
+  sessionCheckTimeout = setTimeout(() => {
+    checkSupabaseSession();
+  }, 100); // Небольшая задержка для предотвращения race conditions
+});
+
+// Предотвращаем множественные проверки сессии при обновлении страницы
+let lastSessionCheck = 0;
+const SESSION_CHECK_COOLDOWN = 2000; // 2 секунды между проверками
+
+// Перехватываем уход со страницы
+window.addEventListener('beforeunload', () => {
+  // Очищаем таймаут при уходе со страницы
+  if (sessionCheckTimeout) {
+    clearTimeout(sessionCheckTimeout);
+  }
+  isCheckingSession = false;
+  isLoggingIn = false;
 });
 
 // Функция для поиска пользователя с повторными попытками
@@ -179,12 +207,20 @@ function setupAuthListener() {
 
 // Проверка сессии Supabase
 async function checkSupabaseSession() {
+  // Предотвращаем множественные одновременные проверки
+  if (isCheckingSession) {
+    console.log('Session check already in progress, skipping...');
+    return;
+  }
+  
   if (!supabaseClient) {
     console.error('Supabase client not initialized');
     // Попробуем восстановить из localStorage
     await restoreUserFromStorage();
     return;
   }
+  
+  isCheckingSession = true;
   
   try {
     // Проверяем существующую сессию (Supabase автоматически восстанавливает из localStorage)
@@ -288,6 +324,8 @@ async function checkSupabaseSession() {
     console.error('Session check error:', error);
     // Проверяем сохранённую сессию как fallback
     await restoreUserFromStorage();
+  } finally {
+    isCheckingSession = false;
   }
 }
 
@@ -586,6 +624,12 @@ async function handleEmailRegister(e) {
 async function handleEmailLogin(e) {
   e.preventDefault();
   
+  // Предотвращаем множественные попытки входа
+  if (isLoggingIn) {
+    console.log('Login already in progress, please wait...');
+    return;
+  }
+  
   if (!supabaseClient) {
     showToast('Supabase client not initialized', 'error', 'Error');
     return;
@@ -608,7 +652,17 @@ async function handleEmailLogin(e) {
   // Normalize email (same as registration)
   const normalizedEmail = email.toLowerCase().trim();
   
+  isLoggingIn = true;
   showLoading();
+  
+  // Отключаем кнопку входа
+  const loginButton = e.target.querySelector('button[type="submit"]') || 
+                      document.querySelector('#emailLoginForm button[type="submit"]');
+  if (loginButton) {
+    loginButton.disabled = true;
+    loginButton.textContent = 'Signing in...';
+  }
+  
   try {
     // Sign in with email/password
     const { data: authData, error: authError } = await supabaseClient.auth.signInWithPassword({
@@ -695,16 +749,24 @@ async function handleEmailLogin(e) {
   } catch (error) {
     console.error('Login error:', error);
     let errorMessage = 'Login failed';
-    if (error.message.includes('Invalid login credentials')) {
+    if (error.message && error.message.includes('Invalid login credentials')) {
       errorMessage = 'Invalid email or password';
-    } else if (error.message.includes('Email not confirmed')) {
+    } else if (error.message && error.message.includes('Email not confirmed')) {
       errorMessage = 'Please check your email and verify your account';
     } else {
       errorMessage = error.message || 'Login failed';
     }
     showToast(errorMessage, 'error', 'Login Error');
   } finally {
+    isLoggingIn = false;
     hideLoading();
+    
+    // Включаем кнопку входа обратно
+    const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
+    if (loginButton) {
+      loginButton.disabled = false;
+      loginButton.textContent = 'Sign In';
+    }
   }
 }
 
