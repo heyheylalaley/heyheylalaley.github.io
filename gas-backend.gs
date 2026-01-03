@@ -16,19 +16,42 @@ const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
 
 // Инициализация таблиц
 function getSpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  if (!SPREADSHEET_ID || SPREADSHEET_ID === 'YOUR_SPREADSHEET_ID_HERE') {
+    throw new Error('SPREADSHEET_ID is not configured. Please set it in the script.');
+  }
+  try {
+    return SpreadsheetApp.openById(SPREADSHEET_ID);
+  } catch (error) {
+    Logger.log('Error opening spreadsheet: ' + error.toString());
+    throw new Error('Cannot access spreadsheet. Check SPREADSHEET_ID and permissions.');
+  }
 }
 
 function getUsersSheet() {
-  return getSpreadsheet().getSheetByName('Users');
+  try {
+    return getSpreadsheet().getSheetByName('Users');
+  } catch (error) {
+    Logger.log('Error getting Users sheet: ' + error.toString());
+    return null;
+  }
 }
 
 function getLogsSheet() {
-  return getSpreadsheet().getSheetByName('Logs');
+  try {
+    return getSpreadsheet().getSheetByName('Logs');
+  } catch (error) {
+    Logger.log('Error getting Logs sheet: ' + error.toString());
+    return null;
+  }
 }
 
 function getSettingsSheet() {
-  return getSpreadsheet().getSheetByName('Settings');
+  try {
+    return getSpreadsheet().getSheetByName('Settings');
+  } catch (error) {
+    Logger.log('Error getting Settings sheet: ' + error.toString());
+    return null;
+  }
 }
 
 // Инициализация структуры таблиц (вызовите один раз вручную)
@@ -81,6 +104,13 @@ function handleRequest(e) {
   try {
     const action = e.parameter.action;
     
+    if (!action) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        message: 'Action parameter is required'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     // CORS headers
     const output = ContentService.createTextOutput();
     output.setMimeType(ContentService.MimeType.JSON);
@@ -116,17 +146,18 @@ function handleRequest(e) {
         result = handleExport(e);
         break;
       default:
-        result = { success: false, message: 'Unknown action' };
+        result = { success: false, message: 'Unknown action: ' + action };
     }
     
     output.setContent(JSON.stringify(result));
     return output;
     
   } catch (error) {
-    Logger.log('Error: ' + error.toString());
+    Logger.log('Error in handleRequest: ' + error.toString());
+    Logger.log('Stack: ' + error.stack);
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
-      message: error.toString()
+      message: 'Server error: ' + error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -134,7 +165,25 @@ function handleRequest(e) {
 // Авторизация через Google OAuth
 function handleLogin(e) {
   try {
-    const postData = JSON.parse(e.postData.contents);
+    // Проверка наличия postData
+    if (!e.postData || !e.postData.contents) {
+      Logger.log('No postData in request');
+      return { success: false, message: 'No data received. Check request format.' };
+    }
+    
+    let postData;
+    try {
+      postData = JSON.parse(e.postData.contents);
+    } catch (parseError) {
+      Logger.log('JSON parse error: ' + parseError.toString());
+      Logger.log('Received data: ' + e.postData.contents);
+      return { success: false, message: 'Invalid JSON in request' };
+    }
+    
+    if (!postData.token) {
+      return { success: false, message: 'Token is required' };
+    }
+    
     const token = postData.token;
     
     // Верификация токена (упрощённая версия)
@@ -142,7 +191,8 @@ function handleLogin(e) {
     const payload = parseJWT(token);
     
     if (!payload || !payload.email) {
-      return { success: false, message: 'Invalid token' };
+      Logger.log('Invalid token payload');
+      return { success: false, message: 'Invalid token. Please try signing in again.' };
     }
     
     const email = payload.email;
@@ -152,7 +202,8 @@ function handleLogin(e) {
     const user = getUserByEmail(email);
     
     if (!user) {
-      return { success: false, message: 'User not found. Contact administrator.' };
+      Logger.log('User not found: ' + email);
+      return { success: false, message: 'User not found. Contact administrator to add your email to the system.' };
     }
     
     return {
@@ -166,7 +217,9 @@ function handleLogin(e) {
     };
     
   } catch (error) {
-    return { success: false, message: error.toString() };
+    Logger.log('Error in handleLogin: ' + error.toString());
+    Logger.log('Stack: ' + error.stack);
+    return { success: false, message: 'Login error: ' + error.toString() };
   }
 }
 
@@ -202,6 +255,10 @@ function handleGetSettings(e) {
 // Добавление записи
 function handleAddLog(e) {
   try {
+    if (!e.postData || !e.postData.contents) {
+      return { success: false, message: 'No data received' };
+    }
+    
     const postData = JSON.parse(e.postData.contents);
     
     const log = {
@@ -217,6 +274,7 @@ function handleAddLog(e) {
     return { success: true, id: id };
     
   } catch (error) {
+    Logger.log('Error in handleAddLog: ' + error.toString());
     return { success: false, message: error.toString() };
   }
 }
@@ -235,6 +293,10 @@ function handleDeleteLog(e) {
 // Обновление настроек
 function handleUpdateSettings(e) {
   try {
+    if (!e.postData || !e.postData.contents) {
+      return { success: false, message: 'No data received' };
+    }
+    
     const postData = JSON.parse(e.postData.contents);
     
     if (postData.overtimeMultiplier !== undefined) {
@@ -243,6 +305,7 @@ function handleUpdateSettings(e) {
     
     return { success: true };
   } catch (error) {
+    Logger.log('Error in handleUpdateSettings: ' + error.toString());
     return { success: false, message: error.toString() };
   }
 }
@@ -284,20 +347,29 @@ function handleExport(e) {
 // ========== Вспомогательные функции для работы с данными ==========
 
 function getUserByEmail(email) {
-  const sheet = getUsersSheet();
-  const data = sheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][2] === email) { // email в колонке C (индекс 2)
-      return {
-        id: data[i][0],
-        name: data[i][1],
-        email: data[i][2],
-        role: data[i][3]
-      };
+  try {
+    const sheet = getUsersSheet();
+    if (!sheet) {
+      Logger.log('Users sheet not found');
+      return null;
     }
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][2] === email) { // email в колонке C (индекс 2)
+        return {
+          id: data[i][0],
+          name: data[i][1],
+          email: data[i][2],
+          role: data[i][3]
+        };
+      }
+    }
+    return null;
+  } catch (error) {
+    Logger.log('Error in getUserByEmail: ' + error.toString());
+    return null;
   }
-  return null;
 }
 
 function getAllUsers() {

@@ -1,6 +1,6 @@
 // Конфигурация - ЗАМЕНИТЕ НА СВОИ ЗНАЧЕНИЯ
 const CONFIG = {
-  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbx2hhfbOX5MydTueHlI5wjjU5A14W9eDvsXovKGmH-lzPj7m_T5vbLfZQ9czrmNV8i0/exec',
+  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbwPN7R5be2PX35bbtPT8800UbkaYVo86UVJF9v_2qI2xUZrw1vMOCCWyedXB7L7jUFY/exec',
   GOOGLE_CLIENT_ID: '821999196894-20d8semsbtdp3dcpu4qf2p1h0u4okb39.apps.googleusercontent.com'
 };
 
@@ -55,7 +55,20 @@ async function handleCredentialResponse(response) {
       body: JSON.stringify({ token: response.credential })
     });
     
-    const data = await res.json();
+    // Проверка статуса ответа
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const text = await res.text();
+    let data;
+    
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error('Ошибка парсинга JSON:', text);
+      throw new Error('Сервер вернул некорректный ответ. Проверьте настройки Google Apps Script.');
+    }
     
     if (data.success) {
       currentUser = data.user;
@@ -63,11 +76,12 @@ async function handleCredentialResponse(response) {
       showMainApp();
       loadData();
     } else {
-      alert('Ошибка авторизации: ' + data.message);
+      alert('Ошибка авторизации: ' + (data.message || 'Неизвестная ошибка'));
     }
   } catch (error) {
     console.error('Ошибка авторизации:', error);
-    alert('Ошибка подключения к серверу');
+    const errorMessage = error.message || 'Неизвестная ошибка';
+    alert(`Ошибка подключения к серверу:\n\n${errorMessage}\n\nПроверьте:\n1. Правильность URL в CONFIG.GAS_API_URL\n2. Что Google Apps Script развёрнут как Web App\n3. Что доступ установлен на "Anyone" или "Anyone with Google account"`);
   }
   hideLoading();
 }
@@ -157,39 +171,73 @@ async function loadData() {
 
 // Загрузка логов пользователя
 async function loadUserLogs() {
-  const res = await fetch(`${CONFIG.GAS_API_URL}?action=getLogs&email=${encodeURIComponent(currentUser.email)}`);
-  const data = await res.json();
-  if (data.success) {
-    currentLogs = data.logs || [];
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getLogs&email=${encodeURIComponent(currentUser.email)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data.success) {
+      currentLogs = data.logs || [];
+    } else {
+      console.error('Ошибка загрузки логов:', data.message);
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки логов:', error);
+    throw error;
   }
 }
 
 // Загрузка всех логов (админ)
 async function loadAllLogs() {
-  const res = await fetch(`${CONFIG.GAS_API_URL}?action=getAllLogs`);
-  const data = await res.json();
-  if (data.success) {
-    currentLogs = data.logs || [];
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getAllLogs`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data.success) {
+      currentLogs = data.logs || [];
+    } else {
+      console.error('Ошибка загрузки всех логов:', data.message);
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки всех логов:', error);
+    throw error;
   }
 }
 
 // Загрузка пользователей (админ)
 async function loadUsers() {
-  const res = await fetch(`${CONFIG.GAS_API_URL}?action=getUsers`);
-  const data = await res.json();
-  if (data.success) {
-    currentUsers = data.users || [];
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getUsers`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data.success) {
+      currentUsers = data.users || [];
+    } else {
+      console.error('Ошибка загрузки пользователей:', data.message);
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки пользователей:', error);
+    throw error;
   }
 }
 
 // Загрузка настроек
 async function loadSettings() {
-  const res = await fetch(`${CONFIG.GAS_API_URL}?action=getSettings`);
-  const data = await res.json();
-  if (data.success && data.settings) {
-    currentMultiplier = parseFloat(data.settings.overtimeMultiplier) || 1.5;
-    document.getElementById('multiplierDisplay').textContent = currentMultiplier;
-    document.getElementById('userMultiplier').textContent = currentMultiplier;
+  try {
+    const res = await fetch(`${CONFIG.GAS_API_URL}?action=getSettings`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    const data = JSON.parse(text);
+    if (data.success && data.settings) {
+      currentMultiplier = parseFloat(data.settings.overtimeMultiplier) || 1.5;
+      document.getElementById('multiplierDisplay').textContent = currentMultiplier;
+      document.getElementById('userMultiplier').textContent = currentMultiplier;
+    }
+  } catch (error) {
+    console.error('Ошибка загрузки настроек:', error);
+    // Не бросаем ошибку, используем значение по умолчанию
   }
 }
 
