@@ -812,9 +812,13 @@ async function handleEmailLogin(e) {
             loginButton.textContent = 'Sign In';
           }
           
+          // Force UI update
           showMainApp();
-          loadData();
+          await loadData();
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
           showToast('Login successful!', 'success');
+          emailPasswordLoginInProgress = false;
           
           if (window.location.hash) {
             window.history.replaceState({}, document.title, window.location.pathname);
