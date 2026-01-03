@@ -1078,36 +1078,48 @@ function setupEventListeners() {
   
   // Date filters - user view
   const userDateFilters = document.getElementById('userDateFilters');
-  if (userDateFilters) {
+  if (userDateFilters && !userDateFilters.hasAttribute('data-listener-attached')) {
+    userDateFilters.setAttribute('data-listener-attached', 'true');
+    
     // Set default active filter
     const defaultFilter = userDateFilters.querySelector('[data-filter="all"]');
     if (defaultFilter) defaultFilter.classList.add('active');
     
     userDateFilters.querySelectorAll('.date-filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         userDateFilters.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentDateFilter = btn.dataset.filter;
         filterUserLogs();
+        console.log('Date filter changed to:', currentDateFilter);
       });
     });
   }
   
   // Sort toggle - user view
   const userSortToggle = document.getElementById('userSortToggle');
-  if (userSortToggle) {
-    userSortToggle.addEventListener('click', () => {
+  if (userSortToggle && !userSortToggle.hasAttribute('data-listener-attached')) {
+    userSortToggle.setAttribute('data-listener-attached', 'true');
+    userSortToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
       updateSortButton('user');
       filterUserLogs();
+      console.log('Sort order changed to:', sortOrder);
     });
   }
   
   // Date filters - admin view
   const adminDateFilters = document.getElementById('adminDateFilters');
-  if (adminDateFilters) {
+  if (adminDateFilters && !adminDateFilters.hasAttribute('data-listener-attached')) {
+    adminDateFilters.setAttribute('data-listener-attached', 'true');
     adminDateFilters.querySelectorAll('.date-filter-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         adminDateFilters.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentDateFilter = btn.dataset.filter;
@@ -1120,8 +1132,11 @@ function setupEventListeners() {
   
   // Sort toggle - admin view
   const adminSortToggle = document.getElementById('adminSortToggle');
-  if (adminSortToggle) {
-    adminSortToggle.addEventListener('click', () => {
+  if (adminSortToggle && !adminSortToggle.hasAttribute('data-listener-attached')) {
+    adminSortToggle.setAttribute('data-listener-attached', 'true');
+    adminSortToggle.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
       sortOrder = sortOrder === 'desc' ? 'asc' : 'desc';
       updateSortButton('admin');
       const selectedCard = document.querySelector('.user-card.selected');
@@ -1657,22 +1672,33 @@ function renderStatsChart() {
   const chartContainer = document.getElementById('statsChart');
   if (!chartContainer) return;
   
+  // Use local dates to avoid timezone issues
   const now = new Date();
-  const thirtyDaysAgo = new Date(now);
+  now.setHours(23, 59, 59, 999); // End of today
+  
+  const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setHours(0, 0, 0, 0); // Start of day
   
   // Get logs for last 30 days
   const recentLogs = currentLogs.filter(log => {
-    const logDate = new Date(log.date);
+    // Parse date string to local date
+    const dateStr = log.date.split('T')[0];
+    const parts = dateStr.split('-');
+    const logDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    logDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
     return logDate >= thirtyDaysAgo && logDate <= now;
   });
   
   // Group by date
   const dailyData = {};
-  for (let i = 0; i < 30; i++) {
-    const date = new Date(thirtyDaysAgo);
-    date.setDate(date.getDate() + i);
-    const dateStr = date.toISOString().split('T')[0];
+  for (let i = 0; i <= 30; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - 30 + i);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     dailyData[dateStr] = { overtime: 0, timeoff: 0, net: 0 };
   }
   
