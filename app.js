@@ -138,6 +138,13 @@ function setupAuthListener() {
         return;
       }
       
+      // Check if main app is already shown (means handleEmailLogin already processed)
+      const mainApp = document.getElementById('mainApp');
+      if (mainApp && !mainApp.classList.contains('hidden')) {
+        console.log('Main app already shown, skipping onAuthStateChange toast');
+        return;
+      }
+      
       try {
         // Wait a bit for trigger to create user
         await new Promise(resolve => setTimeout(resolve, 300));
@@ -158,10 +165,8 @@ function setupAuthListener() {
           localStorage.setItem('user', JSON.stringify(currentUser));
           showMainApp();
           loadData();
-          // Only show toast if user wasn't already loaded (e.g., OAuth login)
-          if (!document.getElementById('mainApp').classList.contains('hidden')) {
-            showToast('Login successful', 'success');
-          }
+          // Only show toast for OAuth logins (not email/password, which is handled in handleEmailLogin)
+          showToast('Login successful', 'success');
           
           // Remove hash from URL after successful login
           if (window.location.hash) {
