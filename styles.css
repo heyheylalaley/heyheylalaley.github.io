@@ -555,11 +555,13 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(2px);
+  transition: opacity 0.3s ease;
 }
 
 .spinner {
@@ -573,6 +575,63 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loaders */
+.skeleton-loader {
+  background: linear-gradient(90deg, var(--gray-200) 25%, var(--gray-100) 50%, var(--gray-200) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+  border-radius: 8px;
+  height: 60px;
+  margin-bottom: 12px;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Smooth transitions */
+.log-item,
+.user-card,
+.card {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.log-item:hover,
+.user-card:hover {
+  transform: translateY(-1px);
+}
+
+/* Button loading state */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.loading {
+  position: relative;
+  color: transparent;
+}
+
+.btn.loading::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin-left: -8px;
+  margin-top: -8px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
 }
 
 /* Empty State */

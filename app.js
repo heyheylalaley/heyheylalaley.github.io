@@ -198,9 +198,11 @@ function showMainApp() {
   }
 }
 
-// Загрузка данных
+// Load data with smooth loading indicators
 async function loadData() {
-  showLoading();
+  // Show skeleton loaders instead of blocking overlay
+  showSkeletonLoaders();
+  
   try {
     if (currentUser.role === 'admin') {
       await Promise.all([
@@ -220,7 +222,8 @@ async function loadData() {
     console.error('Data loading error:', error);
     alert('Data loading error');
   }
-  hideLoading();
+  
+  hideSkeletonLoaders();
 }
 
 // Загрузка логов пользователя
@@ -357,14 +360,14 @@ function renderUserLogs() {
     return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
   });
   
-  // Use documentFragment for better performance
+  // Use documentFragment for better performance with smooth fade-in
   const fragment = document.createDocumentFragment();
   const tempDiv = document.createElement('div');
   
-  sortedLogs.forEach(log => {
+  sortedLogs.forEach((log, index) => {
     const credited = parseFloat(log.creditedHours) || 0;
     tempDiv.innerHTML = `
-      <div class="log-item">
+      <div class="log-item" style="opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease ${index * 0.05}s, transform 0.3s ease ${index * 0.05}s;">
         <div class="log-item-left">
           <div>
             <span class="log-badge ${log.type === 'overtime' ? 'badge-overtime' : 'badge-timeoff'}">
@@ -383,7 +386,14 @@ function renderUserLogs() {
         </div>
       </div>
     `;
-    fragment.appendChild(tempDiv.firstElementChild);
+    const item = tempDiv.firstElementChild;
+    fragment.appendChild(item);
+    
+    // Trigger fade-in animation
+    requestAnimationFrame(() => {
+      item.style.opacity = '1';
+      item.style.transform = 'translateY(0)';
+    });
   });
   
   container.innerHTML = '';
@@ -479,12 +489,15 @@ function renderAdminLogs(filterEmail = null) {
   const fragment = document.createDocumentFragment();
   const tbody = document.createElement('tbody');
   
-  logsToShow.forEach(log => {
+  logsToShow.forEach((log, index) => {
     const credited = parseFloat(log.creditedHours) || 0;
     const userName = currentUsers.find(u => u.email === log.userEmail)?.name || log.userEmail;
     const approvedByText = log.type === 'timeoff' && log.approvedBy ? `<br><small style="color: var(--gray-600);">Approved By: ${escapeHtml(log.approvedBy)}</small>` : '';
     
     const row = document.createElement('tr');
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(-10px)';
+    row.style.transition = `opacity 0.3s ease ${index * 0.03}s, transform 0.3s ease ${index * 0.03}s`;
     row.innerHTML = `
       <td>${formatDate(log.date)}</td>
       <td>${escapeHtml(userName)}</td>
@@ -505,6 +518,12 @@ function renderAdminLogs(filterEmail = null) {
       </td>
     `;
     tbody.appendChild(row);
+    
+    // Trigger fade-in animation
+    requestAnimationFrame(() => {
+      row.style.opacity = '1';
+      row.style.transform = 'translateX(0)';
+    });
   });
   
   fragment.appendChild(tbody);
@@ -579,15 +598,35 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
     renderUserView();
   }
   
-  // Hide form immediately
+  // Hide form immediately with smooth transition
   if (form.id === 'addLogForm') {
-    resetForm();
-    document.getElementById('addLogForm').classList.add('hidden');
-    document.getElementById('addFormToggle').classList.remove('hidden');
+    const formEl = document.getElementById('addLogForm');
+    const toggleEl = document.getElementById('addFormToggle');
+    if (formEl) {
+      formEl.style.opacity = '0';
+      formEl.style.transform = 'translateY(-10px)';
+      setTimeout(() => {
+        resetForm();
+        formEl.classList.add('hidden');
+        formEl.style.opacity = '';
+        formEl.style.transform = '';
+        if (toggleEl) toggleEl.classList.remove('hidden');
+      }, 200);
+    }
   } else {
-    resetAdminForm();
-    document.getElementById('adminAddLogForm').classList.add('hidden');
-    document.getElementById('adminAddFormToggle').classList.remove('hidden');
+    const formEl = document.getElementById('adminAddLogForm');
+    const toggleEl = document.getElementById('adminAddFormToggle');
+    if (formEl) {
+      formEl.style.opacity = '0';
+      formEl.style.transform = 'translateY(-10px)';
+      setTimeout(() => {
+        resetAdminForm();
+        formEl.classList.add('hidden');
+        formEl.style.opacity = '';
+        formEl.style.transform = '';
+        if (toggleEl) toggleEl.classList.remove('hidden');
+      }, 200);
+    }
   }
   
   // Save to server in background
@@ -649,11 +688,24 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
   }
 }
 
-// Delete log entry
+// Delete log entry with optimistic update
 async function handleDeleteLog(logId) {
   if (!confirm('Delete entry?')) return;
   
-  showLoading();
+  // Optimistic update - remove from UI immediately
+  const logToDelete = currentLogs.find(log => log.id == logId);
+  if (logToDelete) {
+    currentLogs = currentLogs.filter(log => log.id != logId);
+    
+    // Update UI immediately
+    if (currentUser.role === 'admin') {
+      renderAdminView();
+    } else {
+      renderUserView();
+    }
+  }
+  
+  // Delete from server in background
   try {
     const res = await fetch(`${CONFIG.GAS_API_URL}?action=deleteLog&id=${logId}`, {
       method: 'POST',
@@ -673,19 +725,34 @@ async function handleDeleteLog(logId) {
       throw new Error('Server returned invalid response');
     }
     
-    if (data.success) {
-      loadData();
-    } else {
+    if (!data.success) {
+      // Rollback on error
+      if (logToDelete) {
+        currentLogs.push(logToDelete);
+        if (currentUser.role === 'admin') {
+          renderAdminView();
+        } else {
+          renderUserView();
+        }
+      }
       alert('Error: ' + data.message);
     }
   } catch (error) {
+    // Rollback on error
+    if (logToDelete) {
+      currentLogs.push(logToDelete);
+      if (currentUser.role === 'admin') {
+        renderAdminView();
+      } else {
+        renderUserView();
+      }
+    }
     console.error('Delete error:', error);
     alert('Delete error: ' + error.message);
   }
-  hideLoading();
 }
 
-// Update multiplier
+// Update multiplier with optimistic update
 async function handleUpdateMultiplier() {
   const newValue = prompt('New overtime multiplier:', currentMultiplier);
   if (!newValue) return;
@@ -696,7 +763,18 @@ async function handleUpdateMultiplier() {
     return;
   }
   
-  showLoading();
+  // Optimistic update - update UI immediately
+  const oldMultiplier = currentMultiplier;
+  currentMultiplier = multiplier;
+  document.getElementById('multiplierDisplay').textContent = multiplier;
+  if (document.getElementById('userMultiplier')) {
+    document.getElementById('userMultiplier').textContent = multiplier;
+  }
+  if (document.getElementById('adminMultiplier')) {
+    document.getElementById('adminMultiplier').textContent = multiplier;
+  }
+  
+  // Save to server in background
   try {
     const formData = new FormData();
     formData.append('overtimeMultiplier', multiplier.toString());
@@ -720,24 +798,33 @@ async function handleUpdateMultiplier() {
       throw new Error('Server returned invalid response');
     }
     
-    if (data.success) {
-      currentMultiplier = multiplier;
-      document.getElementById('multiplierDisplay').textContent = multiplier;
+    if (!data.success) {
+      // Rollback on error
+      currentMultiplier = oldMultiplier;
+      document.getElementById('multiplierDisplay').textContent = oldMultiplier;
       if (document.getElementById('userMultiplier')) {
-        document.getElementById('userMultiplier').textContent = multiplier;
+        document.getElementById('userMultiplier').textContent = oldMultiplier;
       }
       if (document.getElementById('adminMultiplier')) {
-        document.getElementById('adminMultiplier').textContent = multiplier;
+        document.getElementById('adminMultiplier').textContent = oldMultiplier;
       }
-      alert('Multiplier updated');
-    } else {
       alert('Error: ' + data.message);
+    } else {
+      alert('Multiplier updated');
     }
   } catch (error) {
+    // Rollback on error
+    currentMultiplier = oldMultiplier;
+    document.getElementById('multiplierDisplay').textContent = oldMultiplier;
+    if (document.getElementById('userMultiplier')) {
+      document.getElementById('userMultiplier').textContent = oldMultiplier;
+    }
+    if (document.getElementById('adminMultiplier')) {
+      document.getElementById('adminMultiplier').textContent = oldMultiplier;
+    }
     console.error('Update error:', error);
     alert('Update error: ' + error.message);
   }
-  hideLoading();
 }
 
 // Admin export (with user selection)
@@ -852,13 +939,42 @@ function logout() {
   document.getElementById('mainApp').classList.add('hidden');
 }
 
-// Утилиты
+// Utilities - show loading only for critical operations (login)
 function showLoading() {
-  document.getElementById('loadingOverlay').classList.remove('hidden');
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+  }
 }
 
 function hideLoading() {
-  document.getElementById('loadingOverlay').classList.add('hidden');
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+}
+
+// Show skeleton loaders for smooth loading experience
+function showSkeletonLoaders() {
+  const userLogs = document.getElementById('userLogs');
+  const adminLogsBody = document.getElementById('adminLogsBody');
+  const usersList = document.getElementById('usersList');
+  
+  if (userLogs) {
+    userLogs.innerHTML = '<div class="skeleton-loader"></div><div class="skeleton-loader"></div><div class="skeleton-loader"></div>';
+  }
+  
+  if (adminLogsBody) {
+    adminLogsBody.innerHTML = '<tr><td colspan="7"><div class="skeleton-loader" style="height: 40px;"></div></td></tr>';
+  }
+  
+  if (usersList) {
+    usersList.innerHTML = '<div class="skeleton-loader" style="height: 80px;"></div><div class="skeleton-loader" style="height: 80px;"></div>';
+  }
+}
+
+function hideSkeletonLoaders() {
+  // Skeleton loaders are replaced by actual content in render functions
 }
 
 function escapeHtml(text) {
