@@ -9,6 +9,8 @@ let currentUser = null;
 let currentLogs = [];
 let currentUsers = [];
 let currentMultiplier = 1.5;
+let deleteLogId = null; // For delete modal
+let filteredLogs = []; // For search functionality
 
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', () => {
@@ -80,21 +82,164 @@ async function handleCredentialResponse(response) {
       localStorage.setItem('user', JSON.stringify(currentUser));
       showMainApp();
       loadData();
+      showToast('Вход выполнен успешно', 'success');
     } else {
-      alert('Authorization error: ' + (data.message || 'Unknown error'));
+      showToast(data.message || 'Ошибка авторизации', 'error', 'Ошибка входа');
     }
   } catch (error) {
     console.error('Authorization error:', error);
     const errorMessage = error.message || 'Unknown error';
-    alert(`Server connection error:\n\n${errorMessage}\n\nCheck:\n1. Correctness of URL in CONFIG.GAS_API_URL\n2. That Google Apps Script is deployed as Web App\n3. That access is set to "Anyone" or "Anyone with Google account"`);
+    showToast(`Ошибка подключения к серверу. Проверьте настройки CONFIG.GAS_API_URL`, 'error', 'Ошибка подключения');
   }
   hideLoading();
+}
+
+// Toast notification system
+function showToast(message, type = 'info', title = '') {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  
+  const icons = {
+    success: '✅',
+    error: '❌',
+    warning: '⚠️',
+    info: 'ℹ️'
+  };
+  
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || icons.info}</span>
+    <div class="toast-content">
+      ${title ? `<div class="toast-title">${escapeHtml(title)}</div>` : ''}
+      <div class="toast-message">${escapeHtml(message)}</div>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Auto remove after 5 seconds
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.style.animation = 'slideInRight 0.3s ease reverse';
+      setTimeout(() => toast.remove(), 300);
+    }
+  }, 5000);
+}
+
+// Modal functions
+function showDeleteModal(logId) {
+  deleteLogId = logId;
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
+}
+
+function hideDeleteModal() {
+  deleteLogId = null;
+  const modal = document.getElementById('deleteModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
+function showMultiplierModal() {
+  const modal = document.getElementById('multiplierModal');
+  const input = document.getElementById('multiplierInput');
+  if (modal && input) {
+    input.value = currentMultiplier;
+    modal.classList.remove('hidden');
+    input.focus();
+    input.select();
+  }
+}
+
+function hideMultiplierModal() {
+  const modal = document.getElementById('multiplierModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
 }
 
 // Setup event listeners
 function setupEventListeners() {
   // Logout
   document.getElementById('logoutBtn').addEventListener('click', logout);
+  
+  // Refresh buttons
+  const refreshBtn = document.getElementById('refreshBtn');
+  const refreshUserBtn = document.getElementById('refreshUserBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadData());
+  if (refreshUserBtn) refreshUserBtn.addEventListener('click', () => loadData());
+  
+  // Export buttons
+  const userExportBtn = document.getElementById('userExportBtn');
+  const adminExportBtn = document.getElementById('adminExportBtn');
+  if (userExportBtn) userExportBtn.addEventListener('click', handleUserExport);
+  if (adminExportBtn) adminExportBtn.addEventListener('click', handleAdminExport);
+  
+  // Search inputs
+  const userSearchInput = document.getElementById('userSearchInput');
+  const adminSearchInput = document.getElementById('adminSearchInput');
+  if (userSearchInput) {
+    userSearchInput.addEventListener('input', (e) => filterUserLogs(e.target.value));
+  }
+  if (adminSearchInput) {
+    adminSearchInput.addEventListener('input', (e) => {
+      const selectedCard = document.querySelector('.user-card.selected');
+      const selectedEmail = selectedCard ? selectedCard.dataset.email : null;
+      filterAdminLogs(e.target.value, selectedEmail);
+    });
+  }
+  
+  // Delete modal
+  const deleteConfirmBtn = document.getElementById('deleteConfirmBtn');
+  const deleteCancelBtn = document.getElementById('deleteCancelBtn');
+  if (deleteConfirmBtn) {
+    deleteConfirmBtn.addEventListener('click', () => {
+      if (deleteLogId !== null) {
+        handleDeleteLog(deleteLogId);
+        hideDeleteModal();
+      }
+    });
+  }
+  if (deleteCancelBtn) {
+    deleteCancelBtn.addEventListener('click', hideDeleteModal);
+  }
+  
+  // Multiplier modal
+  const multiplierConfirmBtn = document.getElementById('multiplierConfirmBtn');
+  const multiplierCancelBtn = document.getElementById('multiplierCancelBtn');
+  if (multiplierConfirmBtn) {
+    multiplierConfirmBtn.addEventListener('click', () => {
+      const input = document.getElementById('multiplierInput');
+      if (input && input.value) {
+        const multiplier = parseFloat(input.value);
+        if (!isNaN(multiplier) && multiplier > 0) {
+          handleUpdateMultiplier(multiplier);
+          hideMultiplierModal();
+        } else {
+          showToast('Пожалуйста, введите корректное число', 'error');
+        }
+      }
+    });
+  }
+  if (multiplierCancelBtn) {
+    multiplierCancelBtn.addEventListener('click', hideMultiplierModal);
+  }
+  
+  // Close modals on backdrop click
+  const modals = document.querySelectorAll('.modal');
+  modals.forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+      }
+    });
+  });
   
   // User form
   document.getElementById('addFormToggle').addEventListener('click', () => {
@@ -175,7 +320,7 @@ function setupEventListeners() {
   
   // Admin buttons
   const settingsBtn = document.getElementById('settingsBtn');
-  if (settingsBtn) settingsBtn.addEventListener('click', handleUpdateMultiplier);
+  if (settingsBtn) settingsBtn.addEventListener('click', showMultiplierModal);
 }
 
 // Show main app
@@ -187,12 +332,14 @@ function showMainApp() {
     document.getElementById('userView').classList.add('hidden');
     document.getElementById('adminView').classList.remove('hidden');
     document.getElementById('adminControls').classList.remove('hidden');
+    document.getElementById('refreshUserBtn').classList.add('hidden');
     document.getElementById('headerTitle').textContent = 'Admin Panel';
     document.getElementById('headerSubtitle').textContent = currentUser.name;
   } else {
     document.getElementById('userView').classList.remove('hidden');
     document.getElementById('adminView').classList.add('hidden');
     document.getElementById('adminControls').classList.add('hidden');
+    document.getElementById('refreshUserBtn').classList.remove('hidden');
     document.getElementById('headerTitle').textContent = 'Overtime Tracker';
     document.getElementById('headerSubtitle').textContent = currentUser.name;
   }
@@ -220,7 +367,7 @@ async function loadData() {
     }
   } catch (error) {
     console.error('Data loading error:', error);
-    alert('Data loading error');
+    showToast('Ошибка загрузки данных', 'error');
   }
   
   hideSkeletonLoaders();
@@ -342,19 +489,39 @@ function renderUserView() {
   document.getElementById('userBalance').className = 'balance-value ' + 
     (balance > 0 ? 'positive' : balance < 0 ? 'negative' : 'zero');
   
+  // Reset search and render
+  const searchInput = document.getElementById('userSearchInput');
+  if (searchInput) searchInput.value = '';
+  filteredLogs = [...currentLogs];
+  renderUserLogs();
+}
+
+// Filter user logs
+function filterUserLogs(searchTerm) {
+  if (!searchTerm || searchTerm.trim() === '') {
+    filteredLogs = [...currentLogs];
+  } else {
+    const term = searchTerm.toLowerCase();
+    filteredLogs = currentLogs.filter(log => 
+      (log.comment && log.comment.toLowerCase().includes(term)) ||
+      formatDate(log.date).toLowerCase().includes(term)
+    );
+  }
   renderUserLogs();
 }
 
 function renderUserLogs() {
   const container = document.getElementById('userLogs');
   
-  if (currentLogs.length === 0) {
-    container.innerHTML = '<div class="empty-state">No records yet</div>';
+  if (filteredLogs.length === 0) {
+    container.innerHTML = currentLogs.length === 0 
+      ? '<div class="empty-state">Нет записей</div>'
+      : '<div class="empty-state">Ничего не найдено</div>';
     return;
   }
   
   // Sort by date (newest first) - handle ISO format dates
-  const sortedLogs = [...currentLogs].sort((a, b) => {
+  const sortedLogs = [...filteredLogs].sort((a, b) => {
     const dateA = new Date(a.date);
     const dateB = new Date(b.date);
     return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
@@ -413,7 +580,43 @@ function renderAdminView() {
     document.getElementById('adminMultiplier').textContent = currentMultiplier;
   }
   
+  // Populate user select for admin form
+  const userSelect = document.getElementById('adminLogUserEmail');
+  if (userSelect && currentUsers.length > 0) {
+    userSelect.innerHTML = '<option value="">Select employee...</option>' +
+      currentUsers.map(u => `<option value="${u.email}">${escapeHtml(u.name)} (${escapeHtml(u.email)})</option>`).join('');
+  }
+  
+  // Reset search and render
+  const searchInput = document.getElementById('adminSearchInput');
+  if (searchInput) searchInput.value = '';
+  filteredLogs = [...currentLogs];
   renderUsersList();
+  renderAdminLogs();
+}
+
+// Filter admin logs
+function filterAdminLogs(searchTerm, selectedEmail = null) {
+  // First filter by selected user if any
+  let logsToFilter = selectedEmail 
+    ? currentLogs.filter(log => log.userEmail === selectedEmail)
+    : currentLogs;
+  
+  // Then apply search filter if any
+  if (searchTerm && searchTerm.trim() !== '') {
+    const term = searchTerm.toLowerCase();
+    filteredLogs = logsToFilter.filter(log => {
+      const userName = currentUsers.find(u => u.email === log.userEmail)?.name || log.userEmail;
+      return (
+        userName.toLowerCase().includes(term) ||
+        log.userEmail.toLowerCase().includes(term) ||
+        (log.comment && log.comment.toLowerCase().includes(term)) ||
+        formatDate(log.date).toLowerCase().includes(term)
+      );
+    });
+  } else {
+    filteredLogs = logsToFilter;
+  }
   renderAdminLogs();
 }
 
@@ -455,23 +658,24 @@ function renderUsersList() {
       
       if (!isSelected) {
         card.classList.add('selected');
-        renderAdminLogs(email);
         const userName = currentUsers.find(u => u.email === email)?.name || email;
         document.getElementById('historyTitle').textContent = `History: ${userName}`;
       } else {
-        renderAdminLogs();
         document.getElementById('historyTitle').textContent = 'All Records';
       }
+      
+      // Re-apply search filter if any
+      const searchInput = document.getElementById('adminSearchInput');
+      const searchTerm = searchInput ? searchInput.value : '';
+      filterAdminLogs(searchTerm, email);
     });
   });
 }
 
-function renderAdminLogs(filterEmail = null) {
+function renderAdminLogs() {
   const container = document.getElementById('adminLogsBody');
   
-  let logsToShow = filterEmail 
-    ? currentLogs.filter(log => log.userEmail === filterEmail)
-    : currentLogs;
+  let logsToShow = filteredLogs;
   
   // Sort by date (newest first) - handle ISO format dates
   logsToShow = [...logsToShow].sort((a, b) => {
@@ -481,7 +685,7 @@ function renderAdminLogs(filterEmail = null) {
   });
   
   if (logsToShow.length === 0) {
-    container.innerHTML = '<tr><td colspan="7" class="empty-state">No records</td></tr>';
+    container.innerHTML = '<tr><td colspan="7" class="empty-state">Нет записей</td></tr>';
     return;
   }
   
@@ -511,7 +715,7 @@ function renderAdminLogs(filterEmail = null) {
       </td>
       <td>${escapeHtml(log.comment || '')}${approvedByText}</td>
       <td class="text-center">
-        <button class="table-action-btn" onclick="handleDeleteLog(${log.id})" title="Delete">
+        <button class="table-action-btn" onclick="showDeleteModal(${log.id})" title="Delete">
           🗑️
         </button>
       </td>
@@ -541,8 +745,22 @@ async function handleAddLog(e) {
   const comment = document.getElementById('logComment').value;
   const approvedBy = type === 'timeoff' ? (document.getElementById('logApprovedBy')?.value || '') : '';
   
+  // Validation
+  if (!date) {
+    showToast('Пожалуйста, выберите дату', 'warning');
+    return;
+  }
+  
+  const dateObj = new Date(date);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (dateObj > today) {
+    showToast('Нельзя выбрать будущую дату', 'warning');
+    return;
+  }
+  
   if (!hours || hours <= 0) {
-    alert('Please enter a valid number of hours');
+    showToast('Пожалуйста, введите корректное количество часов', 'warning');
     return;
   }
   
@@ -555,17 +773,33 @@ async function handleAdminAddLog(e) {
   
   const form = e.target;
   const type = form.querySelector('.type-btn.active').dataset.type;
+  const userEmailInput = document.getElementById('adminLogUserEmail');
+  const userEmail = userEmailInput?.value || currentUser.email;
   const date = document.getElementById('adminLogDate').value;
   const hours = parseFloat(document.getElementById('adminLogHours').value);
   const comment = document.getElementById('adminLogComment').value;
   const approvedBy = type === 'timeoff' ? (document.getElementById('adminLogApprovedBy')?.value || '') : '';
   
-  if (!hours || hours <= 0) {
-    alert('Please enter a valid number of hours');
+  // Validation
+  if (!date) {
+    showToast('Пожалуйста, выберите дату', 'warning');
     return;
   }
   
-  await saveLogEntry(currentUser.email, date, type, hours, comment, approvedBy, form);
+  const dateObj = new Date(date);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (dateObj > today) {
+    showToast('Нельзя выбрать будущую дату', 'warning');
+    return;
+  }
+  
+  if (!hours || hours <= 0) {
+    showToast('Пожалуйста, введите корректное количество часов', 'warning');
+    return;
+  }
+  
+  await saveLogEntry(userEmail, date, type, hours, comment, approvedBy, form);
 }
 
 // Save log entry with optimistic update
@@ -664,6 +898,7 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
       // Remove temp entry and reload real data
       currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
       await loadData();
+      showToast('Запись успешно добавлена', 'success');
     } else {
       // Rollback on error
       currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
@@ -672,7 +907,7 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
       } else {
         renderUserView();
       }
-      alert('Error: ' + data.message);
+      showToast(data.message || 'Ошибка сохранения', 'error', 'Ошибка');
     }
   } catch (error) {
     // Rollback on error
@@ -683,14 +918,12 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
       renderUserView();
     }
     console.error('Save error:', error);
-    alert('Save error: ' + error.message);
+    showToast('Ошибка сохранения: ' + error.message, 'error', 'Ошибка');
   }
 }
 
 // Delete log entry with optimistic update
 async function handleDeleteLog(logId) {
-  if (!confirm('Delete entry?')) return;
-  
   // Optimistic update - remove from UI immediately
   const logToDelete = currentLogs.find(log => log.id == logId);
   if (logToDelete) {
@@ -734,7 +967,9 @@ async function handleDeleteLog(logId) {
           renderUserView();
         }
       }
-      alert('Error: ' + data.message);
+      showToast(data.message || 'Ошибка удаления', 'error', 'Ошибка');
+    } else {
+      showToast('Запись успешно удалена', 'success');
     }
   } catch (error) {
     // Rollback on error
@@ -747,18 +982,16 @@ async function handleDeleteLog(logId) {
       }
     }
     console.error('Delete error:', error);
-    alert('Delete error: ' + error.message);
+    showToast('Ошибка удаления: ' + error.message, 'error', 'Ошибка');
   }
 }
 
 // Update multiplier with optimistic update
-async function handleUpdateMultiplier() {
-  const newValue = prompt('New overtime multiplier:', currentMultiplier);
-  if (!newValue) return;
+async function handleUpdateMultiplier(multiplier) {
+  if (!multiplier) return;
   
-  const multiplier = parseFloat(newValue);
   if (isNaN(multiplier) || multiplier <= 0) {
-    alert('Invalid value');
+    showToast('Некорректное значение', 'error');
     return;
   }
   
@@ -807,9 +1040,9 @@ async function handleUpdateMultiplier() {
       if (document.getElementById('adminMultiplier')) {
         document.getElementById('adminMultiplier').textContent = oldMultiplier;
       }
-      alert('Error: ' + data.message);
+      showToast(data.message || 'Ошибка обновления', 'error', 'Ошибка');
     } else {
-      alert('Multiplier updated');
+      showToast('Множитель успешно обновлён', 'success');
     }
   } catch (error) {
     // Rollback on error
@@ -822,27 +1055,32 @@ async function handleUpdateMultiplier() {
       document.getElementById('adminMultiplier').textContent = oldMultiplier;
     }
     console.error('Update error:', error);
-    alert('Update error: ' + error.message);
+    showToast('Ошибка обновления: ' + error.message, 'error', 'Ошибка');
   }
 }
 
 // Admin export (with user selection)
 function handleAdminExport() {
-  const userOptions = currentUsers.map(u => `${u.email} - ${u.name}`).join('\n');
-  const userInput = prompt(`Enter user email to export (leave empty for all users):\n\n${userOptions}`);
-  
+  // Get selected user from filter
+  const selectedCard = document.querySelector('.user-card.selected');
   let exportUrl = `${CONFIG.GAS_API_URL}?action=export`;
-  if (userInput && userInput.trim()) {
-    exportUrl += `&email=${encodeURIComponent(userInput.trim())}`;
+  
+  if (selectedCard) {
+    const email = selectedCard.dataset.email;
+    if (email) {
+      exportUrl += `&email=${encodeURIComponent(email)}`;
+    }
   }
   
   window.open(exportUrl, '_blank');
+  showToast('Экспорт начат', 'info');
 }
 
 // User export
 function handleUserExport() {
   const exportUrl = `${CONFIG.GAS_API_URL}?action=export&email=${encodeURIComponent(currentUser.email)}`;
   window.open(exportUrl, '_blank');
+  showToast('Экспорт начат', 'info');
 }
 
 // Update credited hours preview (user form)
@@ -912,12 +1150,14 @@ function resetAdminForm() {
   const commentInput = document.getElementById('adminLogComment');
   const approvedByInput = document.getElementById('adminLogApprovedBy');
   const approvedByGroup = document.getElementById('adminApprovedByGroup');
+  const userSelect = document.getElementById('adminLogUserEmail');
   const form = document.getElementById('adminAddLogForm');
   
   if (dateInput) dateInput.valueAsDate = new Date();
   if (hoursInput) hoursInput.value = '';
   if (commentInput) commentInput.value = '';
   if (approvedByInput) approvedByInput.value = '';
+  if (userSelect) userSelect.value = '';
   if (approvedByGroup) approvedByGroup.style.display = 'none';
   if (form) {
     form.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
@@ -983,4 +1223,4 @@ function escapeHtml(text) {
 }
 
 // Экспорт функции для глобального использования
-window.handleDeleteLog = handleDeleteLog;
+window.showDeleteModal = showDeleteModal;
