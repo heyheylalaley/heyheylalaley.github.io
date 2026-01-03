@@ -102,7 +102,19 @@ function doGet(e) {
 
 function handleRequest(e) {
   try {
-    const action = e.parameter.action;
+    // Поддержка как FormData (e.parameter), так и JSON (e.postData.contents)
+    let action = e.parameter.action;
+    
+    // Если action в параметрах URL (GET запрос)
+    if (!action && e.postData) {
+      // Пытаемся получить из JSON
+      try {
+        const postData = JSON.parse(e.postData.contents);
+        action = postData.action;
+      } catch (e) {
+        // Игнорируем ошибку парсинга
+      }
+    }
     
     if (!action) {
       return ContentService.createTextOutput(JSON.stringify({
@@ -165,26 +177,29 @@ function handleRequest(e) {
 // Авторизация через Google OAuth
 function handleLogin(e) {
   try {
-    // Проверка наличия postData
-    if (!e.postData || !e.postData.contents) {
-      Logger.log('No postData in request');
-      return { success: false, message: 'No data received. Check request format.' };
-    }
+    // Поддержка FormData (e.parameter) и JSON (e.postData.contents)
+    let token;
     
-    let postData;
-    try {
-      postData = JSON.parse(e.postData.contents);
-    } catch (parseError) {
-      Logger.log('JSON parse error: ' + parseError.toString());
-      Logger.log('Received data: ' + e.postData.contents);
-      return { success: false, message: 'Invalid JSON in request' };
-    }
-    
-    if (!postData.token) {
+    if (e.parameter && e.parameter.token) {
+      // FormData запрос
+      token = e.parameter.token;
+    } else if (e.postData && e.postData.contents) {
+      // JSON запрос
+      try {
+        const postData = JSON.parse(e.postData.contents);
+        token = postData.token;
+      } catch (parseError) {
+        Logger.log('JSON parse error: ' + parseError.toString());
+        return { success: false, message: 'Invalid JSON in request' };
+      }
+    } else {
+      Logger.log('No token in request');
       return { success: false, message: 'Token is required' };
     }
     
-    const token = postData.token;
+    if (!token) {
+      return { success: false, message: 'Token is required' };
+    }
     
     // Верификация токена (упрощённая версия)
     // В продакшене используйте библиотеку для верификации JWT
@@ -255,20 +270,32 @@ function handleGetSettings(e) {
 // Добавление записи
 function handleAddLog(e) {
   try {
-    if (!e.postData || !e.postData.contents) {
+    let log;
+    
+    if (e.parameter && e.parameter.userEmail) {
+      // FormData запрос
+      log = {
+        userEmail: e.parameter.userEmail,
+        date: e.parameter.date,
+        type: e.parameter.type,
+        factHours: parseFloat(e.parameter.factHours),
+        creditedHours: parseFloat(e.parameter.creditedHours),
+        comment: e.parameter.comment || ''
+      };
+    } else if (e.postData && e.postData.contents) {
+      // JSON запрос
+      const postData = JSON.parse(e.postData.contents);
+      log = {
+        userEmail: postData.userEmail,
+        date: postData.date,
+        type: postData.type,
+        factHours: parseFloat(postData.factHours),
+        creditedHours: parseFloat(postData.creditedHours),
+        comment: postData.comment || ''
+      };
+    } else {
       return { success: false, message: 'No data received' };
     }
-    
-    const postData = JSON.parse(e.postData.contents);
-    
-    const log = {
-      userEmail: postData.userEmail,
-      date: postData.date,
-      type: postData.type,
-      factHours: parseFloat(postData.factHours),
-      creditedHours: parseFloat(postData.creditedHours),
-      comment: postData.comment || ''
-    };
     
     const id = addLog(log);
     return { success: true, id: id };
@@ -293,14 +320,21 @@ function handleDeleteLog(e) {
 // Обновление настроек
 function handleUpdateSettings(e) {
   try {
-    if (!e.postData || !e.postData.contents) {
+    let multiplier;
+    
+    if (e.parameter && e.parameter.overtimeMultiplier) {
+      // FormData запрос
+      multiplier = e.parameter.overtimeMultiplier;
+    } else if (e.postData && e.postData.contents) {
+      // JSON запрос
+      const postData = JSON.parse(e.postData.contents);
+      multiplier = postData.overtimeMultiplier;
+    } else {
       return { success: false, message: 'No data received' };
     }
     
-    const postData = JSON.parse(e.postData.contents);
-    
-    if (postData.overtimeMultiplier !== undefined) {
-      updateSetting('overtimeMultiplier', postData.overtimeMultiplier.toString());
+    if (multiplier !== undefined) {
+      updateSetting('overtimeMultiplier', multiplier.toString());
     }
     
     return { success: true };

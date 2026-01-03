@@ -49,10 +49,16 @@ function initializeGoogleSignIn() {
 async function handleCredentialResponse(response) {
   showLoading();
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=login`, {
+    // Используем FormData для совместимости с Google Apps Script
+    const formData = new FormData();
+    formData.append('action', 'login');
+    formData.append('token', response.credential);
+    
+    const res = await fetch(CONFIG.GAS_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: response.credential })
+      body: formData,
+      // Не указываем Content-Type, браузер установит его автоматически с boundary
+      redirect: 'follow'
     });
     
     // Проверка статуса ответа
@@ -410,20 +416,33 @@ async function handleAddLog(e) {
       ? factHours * currentMultiplier 
       : -factHours;
     
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=addLog`, {
+    const formData = new FormData();
+    formData.append('action', 'addLog');
+    formData.append('userEmail', currentUser.email);
+    formData.append('date', date);
+    formData.append('type', type);
+    formData.append('factHours', factHours.toString());
+    formData.append('creditedHours', creditedHours.toString());
+    formData.append('comment', comment);
+    
+    const res = await fetch(CONFIG.GAS_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userEmail: currentUser.email,
-        date: date,
-        type: type,
-        factHours: factHours,
-        creditedHours: creditedHours,
-        comment: comment
-      })
+      body: formData,
+      redirect: 'follow'
     });
     
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error('Ошибка парсинга JSON:', text);
+      throw new Error('Сервер вернул некорректный ответ');
+    }
     
     if (data.success) {
       resetForm();
@@ -435,7 +454,7 @@ async function handleAddLog(e) {
     }
   } catch (error) {
     console.error('Ошибка сохранения:', error);
-    alert('Ошибка сохранения');
+    alert('Ошибка сохранения: ' + error.message);
   }
   hideLoading();
 }
@@ -447,10 +466,22 @@ async function handleDeleteLog(logId) {
   showLoading();
   try {
     const res = await fetch(`${CONFIG.GAS_API_URL}?action=deleteLog&id=${logId}`, {
-      method: 'POST'
+      method: 'POST',
+      redirect: 'follow'
     });
     
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error('Ошибка парсинга JSON:', text);
+      throw new Error('Сервер вернул некорректный ответ');
+    }
     
     if (data.success) {
       loadData();
@@ -459,7 +490,7 @@ async function handleDeleteLog(logId) {
     }
   } catch (error) {
     console.error('Ошибка удаления:', error);
-    alert('Ошибка удаления');
+    alert('Ошибка удаления: ' + error.message);
   }
   hideLoading();
 }
@@ -477,13 +508,28 @@ async function handleUpdateMultiplier() {
   
   showLoading();
   try {
-    const res = await fetch(`${CONFIG.GAS_API_URL}?action=updateSettings`, {
+    const formData = new FormData();
+    formData.append('action', 'updateSettings');
+    formData.append('overtimeMultiplier', multiplier.toString());
+    
+    const res = await fetch(CONFIG.GAS_API_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ overtimeMultiplier: multiplier })
+      body: formData,
+      redirect: 'follow'
     });
     
-    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    
+    const text = await res.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      console.error('Ошибка парсинга JSON:', text);
+      throw new Error('Сервер вернул некорректный ответ');
+    }
     
     if (data.success) {
       currentMultiplier = multiplier;
@@ -494,7 +540,7 @@ async function handleUpdateMultiplier() {
     }
   } catch (error) {
     console.error('Ошибка обновления:', error);
-    alert('Ошибка обновления');
+    alert('Ошибка обновления: ' + error.message);
   }
   hideLoading();
 }
