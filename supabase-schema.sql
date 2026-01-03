@@ -152,9 +152,7 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', SPLIT_PART(NEW.email, '@', 1)),
     'user' -- Always 'user', never 'admin' for security
   )
-  ON CONFLICT (email) DO UPDATE SET
-    name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', users.name),
-    role = 'user'; -- Ensure role is always 'user', never allow admin role through registration
+  ON CONFLICT (email) DO NOTHING; -- Don't overwrite existing user data (preserve name and role changes)
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

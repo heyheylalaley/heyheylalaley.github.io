@@ -673,38 +673,34 @@ async function handleEmailLogin(e) {
     if (authData.user) {
       console.log('Auth successful, setting up user...');
       
-      // Get user name from auth metadata or email
-      const userName = authData.user.user_metadata?.full_name || 
-                      authData.user.user_metadata?.name || 
-                      normalizedEmail.split('@')[0];
-      
-      // Use upsert to ensure user exists in database
+      // First, try to find existing user (don't overwrite their data)
       try {
-        const { data: userData, error: upsertError } = await supabaseClient
+        const { data: existingUser } = await supabaseClient
           .from('users')
-          .upsert(
-            { email: normalizedEmail, name: userName },
-            { onConflict: 'email', ignoreDuplicates: false }
-          )
           .select('id, email, name, role')
+          .eq('email', normalizedEmail)
           .single();
         
-        if (upsertError) {
-          console.error('Upsert error:', upsertError);
-          // Try simple select as fallback
-          const { data: existingUser } = await supabaseClient
+        if (existingUser) {
+          // User exists - use their existing data (don't overwrite name!)
+          currentUser = existingUser;
+        } else {
+          // User doesn't exist - create new one
+          const userName = authData.user.user_metadata?.full_name || 
+                          authData.user.user_metadata?.name || 
+                          normalizedEmail.split('@')[0];
+          
+          const { data: newUser, error: insertError } = await supabaseClient
             .from('users')
+            .insert({ email: normalizedEmail, name: userName, role: 'user' })
             .select('id, email, name, role')
-            .eq('email', normalizedEmail)
             .single();
           
-          if (existingUser) {
-            currentUser = existingUser;
-          } else {
-            throw new Error('Could not find or create user');
+          if (insertError) {
+            console.error('Insert error:', insertError);
+            throw new Error('Could not create user');
           }
-        } else {
-          currentUser = userData;
+          currentUser = newUser;
         }
         
         localStorage.setItem('user', JSON.stringify(currentUser));
