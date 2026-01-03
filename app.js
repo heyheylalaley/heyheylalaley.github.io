@@ -737,13 +737,64 @@ async function handleEmailLogin(e) {
           role: userData.role
         };
         localStorage.setItem('user', JSON.stringify(currentUser));
+        
+        // Скрываем loading и обновляем UI
+        hideLoading();
+        isLoggingIn = false;
+        
+        // Включаем кнопку входа обратно
+        const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
+        if (loginButton) {
+          loginButton.disabled = false;
+          loginButton.textContent = 'Sign In';
+        }
+        
+        // Показываем главное приложение
         showMainApp();
         loadData();
         showToast('Login successful!', 'success');
+        
+        // Убираем hash из URL если есть
+        if (window.location.hash) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+        
+        return; // Выходим, так как вход успешен
       } else {
-        // Если пользователь все еще не найден, подождем еще и попробуем через onAuthStateChange
+        // Если пользователь все еще не найден, подождем еще
         console.warn('User not found immediately, waiting for auth state change...');
-        // onAuthStateChange должен обработать это
+        // onAuthStateChange должен обработать это, но дадим ему время
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Проверим еще раз
+        const retryUserData = await findUserByEmail(normalizedEmail);
+        if (retryUserData) {
+          currentUser = {
+            id: retryUserData.id,
+            name: retryUserData.name,
+            email: retryUserData.email,
+            role: retryUserData.role
+          };
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          
+          hideLoading();
+          isLoggingIn = false;
+          
+          const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
+          if (loginButton) {
+            loginButton.disabled = false;
+            loginButton.textContent = 'Sign In';
+          }
+          
+          showMainApp();
+          loadData();
+          showToast('Login successful!', 'success');
+          
+          if (window.location.hash) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          return;
+        }
       }
     }
   } catch (error) {
@@ -758,14 +809,16 @@ async function handleEmailLogin(e) {
     }
     showToast(errorMessage, 'error', 'Login Error');
   } finally {
-    isLoggingIn = false;
-    hideLoading();
-    
-    // Включаем кнопку входа обратно
-    const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
-    if (loginButton) {
-      loginButton.disabled = false;
-      loginButton.textContent = 'Sign In';
+    // Убеждаемся, что флаги сброшены и UI обновлен
+    if (isLoggingIn) {
+      isLoggingIn = false;
+      hideLoading();
+      
+      const loginButton = document.querySelector('#emailLoginForm button[type="submit"]');
+      if (loginButton) {
+        loginButton.disabled = false;
+        loginButton.textContent = 'Sign In';
+      }
     }
   }
 }
