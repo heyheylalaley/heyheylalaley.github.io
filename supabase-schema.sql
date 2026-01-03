@@ -126,11 +126,12 @@ RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (email, name, role)
   VALUES (
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'name', NEW.email),
+    LOWER(TRIM(NEW.email)), -- Нормализуем email: нижний регистр и убираем пробелы
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', SPLIT_PART(NEW.email, '@', 1)),
     'user'
   )
-  ON CONFLICT (email) DO NOTHING;
+  ON CONFLICT (email) DO UPDATE SET
+    name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', users.name);
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

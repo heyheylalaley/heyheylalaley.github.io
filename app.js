@@ -28,6 +28,65 @@ document.addEventListener('DOMContentLoaded', () => {
   checkSupabaseSession();
 });
 
+// Функция для поиска пользователя с повторными попытками
+async function findUserByEmail(email, maxAttempts = 5, delay = 500) {
+  if (!supabaseClient || !email) return null;
+  
+  const normalizedEmail = email.toLowerCase().trim();
+  console.log('Searching for user with email:', normalizedEmail, '(normalized from:', email, ')');
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      // Сначала пробуем точный поиск
+      let { data: userData, error: userError } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('email', email)
+        .maybeSingle();
+      
+      // Если не нашли, пробуем без учета регистра через получение всех пользователей
+      if (!userData || userError) {
+        console.log('Exact match not found, trying case-insensitive search...');
+        const { data: allUsers, error: allError } = await supabaseClient
+          .from('users')
+          .select('*');
+        
+        if (allUsers && !allError) {
+          console.log('All users in database:', allUsers.map(u => ({ email: u.email, id: u.id })));
+          userData = allUsers.find(u => u.email && u.email.toLowerCase().trim() === normalizedEmail);
+          if (userData) {
+            console.log('User found in case-insensitive search:', userData);
+            userError = null;
+          }
+        }
+      }
+      
+      if (userData && !userError) {
+        console.log('User found on attempt', attempt, ':', userData);
+        return userData;
+      }
+      
+      // Если это не последняя попытка, ждем перед следующей
+      if (attempt < maxAttempts) {
+        console.log(`User not found, retrying in ${delay}ms (attempt ${attempt}/${maxAttempts})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        console.error('User not found after', maxAttempts, 'attempts. Email searched:', normalizedEmail);
+        if (userError) {
+          console.error('Last error:', userError);
+        }
+      }
+    } catch (error) {
+      console.error('Error searching for user (attempt', attempt, '):', error);
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  return null;
+}
+
 // Настройка слушателя изменений авторизации
 function setupAuthListener() {
   if (!supabaseClient) return;
@@ -38,13 +97,13 @@ function setupAuthListener() {
     if (event === 'SIGNED_IN' && session) {
       // Пользователь успешно вошел
       try {
-        const { data: userData, error: userError } = await supabaseClient
-          .from('users')
-          .select('*')
-          .eq('email', session.user.email)
-          .single();
+        // Ждем немного, чтобы триггер успел создать пользователя
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        if (userData && !userError) {
+        // Ищем пользователя с повторными попытками
+        const userData = await findUserByEmail(session.user.email);
+        
+        if (userData) {
           currentUser = {
             id: userData.id,
             name: userData.name,
@@ -61,11 +120,12 @@ function setupAuthListener() {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         } else {
+          console.error('User not found. Session email:', session.user.email);
           showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
         }
       } catch (error) {
         console.error('Error loading user data:', error);
-        showToast('Error loading user data', 'error');
+        showToast('Error loading user data: ' + error.message, 'error');
       }
     } else if (event === 'SIGNED_OUT') {
       // Пользователь вышел
@@ -92,13 +152,9 @@ async function checkSupabaseSession() {
     
     if (session && !error) {
       // Получаем информацию о пользователе из таблицы users
-      const { data: userData, error: userError } = await supabaseClient
-        .from('users')
-        .select('*')
-        .eq('email', session.user.email)
-        .single();
+      const userData = await findUserByEmail(session.user.email, 3, 200);
       
-      if (userData && !userError) {
+      if (userData) {
         currentUser = {
           id: userData.id,
           name: userData.name,
@@ -122,13 +178,13 @@ async function checkSupabaseSession() {
       
       if (newSession && !sessionError && !currentUser) {
         // Сессия установлена, но пользователь еще не загружен
-        const { data: userData, error: userError } = await supabaseClient
-          .from('users')
-          .select('*')
-          .eq('email', newSession.user.email)
-          .single();
+        // Ждем немного, чтобы триггер успел создать пользователя
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        if (userData && !userError) {
+        // Ищем пользователя с повторными попытками
+        const userData = await findUserByEmail(newSession.user.email);
+        
+        if (userData) {
           currentUser = {
             id: userData.id,
             name: userData.name,
@@ -140,6 +196,7 @@ async function checkSupabaseSession() {
           loadData();
           showToast('Login successful', 'success');
         } else {
+          console.error('User not found. Session email:', newSession.user.email);
           showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
         }
         
@@ -153,13 +210,10 @@ async function checkSupabaseSession() {
       const { data: { session: finalSession }, error: finalError } = await supabaseClient.auth.getSession();
       
       if (finalSession && !finalError) {
-        const { data: userData, error: userError } = await supabaseClient
-          .from('users')
-          .select('*')
-          .eq('email', finalSession.user.email)
-          .single();
+        // Ищем пользователя с повторными попытками
+        const userData = await findUserByEmail(finalSession.user.email);
         
-        if (userData && !userError) {
+        if (userData) {
           currentUser = {
             id: userData.id,
             name: userData.name,
@@ -173,6 +227,8 @@ async function checkSupabaseSession() {
           
           // Убираем hash из URL
           window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          console.error('User not found. Session email:', finalSession.user.email);
         }
       }
     }
