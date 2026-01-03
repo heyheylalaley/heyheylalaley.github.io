@@ -85,7 +85,16 @@ CREATE POLICY "Anyone can read users" ON users
 CREATE POLICY "Anyone can insert users" ON users
   FOR INSERT WITH CHECK (true);
 
--- Только админы могут обновлять пользователей
+-- Пользователи могут обновлять свое имя, админы могут обновлять всех
+CREATE POLICY "Users can update own name" ON users
+  FOR UPDATE USING (
+    LOWER(TRIM(email)) = LOWER(TRIM(auth.jwt() ->> 'email'))
+  )
+  WITH CHECK (
+    LOWER(TRIM(email)) = LOWER(TRIM(auth.jwt() ->> 'email'))
+  );
+
+-- Админы могут обновлять всех пользователей
 CREATE POLICY "Admins can update users" ON users
   FOR UPDATE USING (public.is_admin());
 
