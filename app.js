@@ -1,6 +1,6 @@
 // Конфигурация - ЗАМЕНИТЕ НА СВОИ ЗНАЧЕНИЯ
 const CONFIG = {
-  GAS_API_URL: 'https://script.google.com/macros/s/AKfycbwPN7R5be2PX35bbtPT8800UbkaYVo86UVJF9v_2qI2xUZrw1vMOCCWyedXB7L7jUFY/exec',
+  GAS_API_URL: 'AKfycbwPN7R5be2PX35bbtPT8800UbkaYVo86UVJF9v_2qI2xUZrw1vMOCCWyedXB7L7jUFY',
   GOOGLE_CLIENT_ID: '821999196894-20d8semsbtdp3dcpu4qf2p1h0u4okb39.apps.googleusercontent.com'
 };
 
