@@ -44,24 +44,54 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 
+-- Функция для проверки роли админа (без рекурсии)
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+DECLARE
+  user_email TEXT;
+  user_role TEXT;
+BEGIN
+  -- Получаем email из JWT токена
+  user_email := auth.jwt() ->> 'email';
+  
+  IF user_email IS NULL THEN
+    RETURN FALSE;
+  END IF;
+  
+  -- Используем SECURITY DEFINER для обхода RLS
+  -- Это позволяет проверить роль без рекурсии
+  SELECT role INTO user_role
+  FROM public.users
+  WHERE email = LOWER(TRIM(user_email))
+  LIMIT 1;
+  
+  RETURN user_role = 'admin';
+END;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
+
 -- Политики безопасности для таблицы users
 -- Удаляем существующие политики перед созданием новых
 DROP POLICY IF EXISTS "Anyone can read users" ON users;
+DROP POLICY IF EXISTS "Anyone can insert users" ON users;
+DROP POLICY IF EXISTS "Admins can update users" ON users;
+DROP POLICY IF EXISTS "Admins can delete users" ON users;
 DROP POLICY IF EXISTS "Admins can manage users" ON users;
 
 -- Все могут читать пользователей (для отображения списка)
 CREATE POLICY "Anyone can read users" ON users
   FOR SELECT USING (true);
 
--- Только админы могут создавать/обновлять пользователей
-CREATE POLICY "Admins can manage users" ON users
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE email = auth.jwt() ->> 'email'
-      AND role = 'admin'
-    )
-  );
+-- Все могут создавать пользователей (триггер и API)
+CREATE POLICY "Anyone can insert users" ON users
+  FOR INSERT WITH CHECK (true);
+
+-- Только админы могут обновлять пользователей
+CREATE POLICY "Admins can update users" ON users
+  FOR UPDATE USING (public.is_admin());
+
+-- Только админы могут удалять пользователей
+CREATE POLICY "Admins can delete users" ON users
+  FOR DELETE USING (public.is_admin());
 
 -- Политики безопасности для таблицы logs
 -- Удаляем существующие политики перед созданием новых
@@ -72,34 +102,20 @@ DROP POLICY IF EXISTS "Admins can delete logs" ON logs;
 -- Пользователи могут читать свои логи
 CREATE POLICY "Users can read own logs" ON logs
   FOR SELECT USING (
-    user_email = auth.jwt() ->> 'email'
-    OR EXISTS (
-      SELECT 1 FROM users
-      WHERE email = auth.jwt() ->> 'email'
-      AND role = 'admin'
-    )
+    LOWER(TRIM(user_email)) = LOWER(TRIM(auth.jwt() ->> 'email'))
+    OR public.is_admin()
   );
 
 -- Пользователи могут создавать свои логи
 CREATE POLICY "Users can insert own logs" ON logs
   FOR INSERT WITH CHECK (
-    user_email = auth.jwt() ->> 'email'
-    OR EXISTS (
-      SELECT 1 FROM users
-      WHERE email = auth.jwt() ->> 'email'
-      AND role = 'admin'
-    )
+    LOWER(TRIM(user_email)) = LOWER(TRIM(auth.jwt() ->> 'email'))
+    OR public.is_admin()
   );
 
 -- Только админы могут удалять логи
 CREATE POLICY "Admins can delete logs" ON logs
-  FOR DELETE USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE email = auth.jwt() ->> 'email'
-      AND role = 'admin'
-    )
-  );
+  FOR DELETE USING (public.is_admin());
 
 -- Политики безопасности для таблицы settings
 -- Удаляем существующие политики перед созданием новых
@@ -112,13 +128,7 @@ CREATE POLICY "Anyone can read settings" ON settings
 
 -- Только админы могут обновлять настройки
 CREATE POLICY "Admins can update settings" ON settings
-  FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE email = auth.jwt() ->> 'email'
-      AND role = 'admin'
-    )
-  );
+  FOR UPDATE USING (public.is_admin());
 
 -- Функция для автоматического создания пользователя при регистрации
 CREATE OR REPLACE FUNCTION public.handle_new_user()
