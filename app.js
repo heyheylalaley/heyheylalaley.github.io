@@ -239,50 +239,44 @@ async function checkSupabaseSession() {
     return;
   }
   
+  // IMMEDIATE: Show app from localStorage without waiting for async checks
+  const savedUser = localStorage.getItem('user');
+  if (savedUser) {
+    try {
+      const parsed = JSON.parse(savedUser);
+      if (parsed.email && parsed.id && parsed.role) {
+        currentUser = parsed;
+        showMainApp();
+        loadData();
+        console.log('Instant restore from localStorage');
+        
+        // Verify session in background (don't block UI)
+        supabaseClient.auth.getSession().then(({ data: { session }, error }) => {
+          if (!session || error) {
+            console.warn('Session invalid, logging out');
+            localStorage.removeItem('user');
+            currentUser = null;
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+          }
+        });
+        return;
+      }
+    } catch (e) {
+      localStorage.removeItem('user');
+    }
+  }
+  
   isCheckingSession = true;
   
   try {
-    // First, try to restore from localStorage immediately (fastest path)
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        if (parsed.email && parsed.id) {
-          // Verify session is still valid
-          const { data: { session } } = await supabaseClient.auth.getSession();
-          if (session && session.user.email.toLowerCase() === parsed.email.toLowerCase()) {
-            currentUser = parsed;
-            showMainApp();
-            loadData();
-            console.log('Quick restore from localStorage');
-            return;
-          }
-        }
-      } catch (e) {}
-    }
-    
-    // If localStorage didn't work, check Supabase session
+    // No localStorage - check Supabase session
     const { data: { session }, error } = await supabaseClient.auth.getSession();
     
     if (session && !error) {
       console.log('Session found for:', session.user.email);
       
-      // First try localStorage (fastest)
-      const savedUser = localStorage.getItem('user');
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          if (parsed.email?.toLowerCase() === session.user.email.toLowerCase() && parsed.id) {
-            currentUser = parsed;
-            showMainApp();
-            loadData();
-            console.log('User restored from localStorage');
-            return;
-          }
-        } catch (e) {}
-      }
-      
-      // Fallback: get from database
+      // Get user from database
       const userData = await findUserByEmail(session.user.email);
       
       if (userData) {
@@ -297,7 +291,7 @@ async function checkSupabaseSession() {
         loadData();
         console.log('User restored from database');
       } else {
-        console.warn('Session exists but user not found - clearing session');
+        console.warn('Session exists but user not found');
         localStorage.removeItem('user');
       }
     } else {
@@ -305,8 +299,7 @@ async function checkSupabaseSession() {
       localStorage.removeItem('user');
     }
     
-    // OAuth callbacks are handled by onAuthStateChange listener
-    // Just clean up URL hash if present
+    // Clean up URL hash if present
     if (window.location.hash) {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
