@@ -73,10 +73,10 @@ function initializeSheets() {
   let logsSheet = ss.getSheetByName('Logs');
   if (!logsSheet) {
     logsSheet = ss.insertSheet('Logs');
-    logsSheet.getRange(1, 1, 1, 8).setValues([[
-      'id', 'userEmail', 'date', 'type', 'factHours', 'creditedHours', 'comment', 'createdAt'
+    logsSheet.getRange(1, 1, 1, 9).setValues([[
+      'id', 'userEmail', 'date', 'type', 'factHours', 'creditedHours', 'comment', 'createdAt', 'approvedBy'
     ]]);
-    logsSheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+    logsSheet.getRange(1, 1, 1, 9).setFontWeight('bold');
   }
   
   // Создание листа Settings
@@ -273,17 +273,18 @@ function handleAddLog(e) {
     let log;
     
     if (e.parameter && e.parameter.userEmail) {
-      // FormData запрос
+      // FormData request
       log = {
         userEmail: e.parameter.userEmail,
         date: e.parameter.date,
         type: e.parameter.type,
         factHours: parseFloat(e.parameter.factHours),
         creditedHours: parseFloat(e.parameter.creditedHours),
-        comment: e.parameter.comment || ''
+        comment: e.parameter.comment || '',
+        approvedBy: e.parameter.approvedBy || ''
       };
     } else if (e.postData && e.postData.contents) {
-      // JSON запрос
+      // JSON request
       const postData = JSON.parse(e.postData.contents);
       log = {
         userEmail: postData.userEmail,
@@ -291,7 +292,8 @@ function handleAddLog(e) {
         type: postData.type,
         factHours: parseFloat(postData.factHours),
         creditedHours: parseFloat(postData.creditedHours),
-        comment: postData.comment || ''
+        comment: postData.comment || '',
+        approvedBy: postData.approvedBy || ''
       };
     } else {
       return { success: false, message: 'No data received' };
@@ -435,7 +437,7 @@ function getLogsByEmail(email) {
   const logs = [];
   
   for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === email) { // userEmail в колонке B (индекс 1)
+    if (data[i][1] === email) { // userEmail in column B (index 1)
       logs.push({
         id: data[i][0],
         userEmail: data[i][1],
@@ -443,8 +445,9 @@ function getLogsByEmail(email) {
         type: data[i][3],
         factHours: data[i][4],
         creditedHours: data[i][5],
-        comment: data[i][6],
-        createdAt: data[i][7]
+        comment: data[i][6] || '',
+        createdAt: data[i][7],
+        approvedBy: data[i][8] || '' // approvedBy in column I (index 8)
       });
     }
   }
@@ -464,8 +467,9 @@ function getAllLogs() {
       type: data[i][3],
       factHours: data[i][4],
       creditedHours: data[i][5],
-      comment: data[i][6],
-      createdAt: data[i][7]
+      comment: data[i][6] || '',
+      createdAt: data[i][7],
+      approvedBy: data[i][8] || '' // approvedBy in column I (index 8)
     });
   }
   return logs;
@@ -474,7 +478,7 @@ function getAllLogs() {
 function addLog(log) {
   const sheet = getLogsSheet();
   const lastRow = sheet.getLastRow();
-  const newId = lastRow; // Простая нумерация
+  const newId = lastRow; // Simple numbering
   
   const now = new Date().toISOString().split('T')[0];
   
@@ -485,8 +489,9 @@ function addLog(log) {
     log.type,
     log.factHours,
     log.creditedHours,
-    log.comment,
-    now
+    log.comment || '',
+    now,
+    log.approvedBy || '' // approvedBy in column I (index 8)
   ]);
   
   return newId;

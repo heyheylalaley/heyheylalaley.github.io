@@ -127,6 +127,7 @@ function setupEventListeners() {
       btn.addEventListener('click', () => {
         userForm.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        toggleApprovedByField('logApprovedBy', 'approvedByGroup', btn.dataset.type === 'timeoff');
         updateCreditedPreview();
       });
     });
@@ -139,9 +140,20 @@ function setupEventListeners() {
       btn.addEventListener('click', () => {
         adminForm.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        toggleApprovedByField('adminLogApprovedBy', 'adminApprovedByGroup', btn.dataset.type === 'timeoff');
         updateAdminCreditedPreview();
       });
     });
+  }
+  
+  // Toggle Approved By field visibility
+  function toggleApprovedByField(inputId, groupId, show) {
+    const group = document.getElementById(groupId);
+    const input = document.getElementById(inputId);
+    if (group && input) {
+      group.style.display = show ? 'block' : 'none';
+      if (!show) input.value = '';
+    }
   }
   
   // Form fields
@@ -345,9 +357,13 @@ function renderUserLogs() {
     return dateB.getTime() - dateA.getTime(); // Descending order (newest first)
   });
   
-  container.innerHTML = sortedLogs.map(log => {
+  // Use documentFragment for better performance
+  const fragment = document.createDocumentFragment();
+  const tempDiv = document.createElement('div');
+  
+  sortedLogs.forEach(log => {
     const credited = parseFloat(log.creditedHours) || 0;
-    return `
+    tempDiv.innerHTML = `
       <div class="log-item">
         <div class="log-item-left">
           <div>
@@ -360,13 +376,18 @@ function renderUserLogs() {
             Actual: <strong>${log.factHours} hrs</strong>
           </div>
           ${log.comment ? `<div class="log-comment">${escapeHtml(log.comment)}</div>` : ''}
+          ${log.type === 'timeoff' && log.approvedBy ? `<div class="log-approved-by" style="margin-top: 4px; font-size: 12px; color: var(--gray-600);">Approved By: <strong>${escapeHtml(log.approvedBy)}</strong></div>` : ''}
         </div>
         <div class="log-credited ${credited > 0 ? 'positive' : 'negative'}">
           ${credited > 0 ? '+' : ''}${credited} hrs
         </div>
       </div>
     `;
-  }).join('');
+    fragment.appendChild(tempDiv.firstElementChild);
+  });
+  
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
 
 // Render admin view
@@ -454,32 +475,41 @@ function renderAdminLogs(filterEmail = null) {
     return;
   }
   
-  container.innerHTML = logsToShow.map(log => {
+  // Use documentFragment for better performance
+  const fragment = document.createDocumentFragment();
+  const tbody = document.createElement('tbody');
+  
+  logsToShow.forEach(log => {
     const credited = parseFloat(log.creditedHours) || 0;
     const userName = currentUsers.find(u => u.email === log.userEmail)?.name || log.userEmail;
+    const approvedByText = log.type === 'timeoff' && log.approvedBy ? `<br><small style="color: var(--gray-600);">Approved By: ${escapeHtml(log.approvedBy)}</small>` : '';
     
-    return `
-      <tr>
-        <td>${formatDate(log.date)}</td>
-        <td>${escapeHtml(userName)}</td>
-        <td>
-          <span class="table-badge ${log.type === 'overtime' ? 'badge-overtime' : 'badge-timeoff'}">
-            ${log.type === 'overtime' ? 'Overtime' : 'Time Off'}
-          </span>
-        </td>
-        <td class="text-right">${log.factHours}</td>
-        <td class="text-right ${credited > 0 ? 'positive' : 'negative'}" style="font-weight: 600; color: ${credited > 0 ? 'var(--success)' : 'var(--danger)'}">
-          ${credited > 0 ? '+' : ''}${credited}
-        </td>
-        <td>${escapeHtml(log.comment || '')}</td>
-        <td class="text-center">
-          <button class="table-action-btn" onclick="handleDeleteLog(${log.id})" title="Delete">
-            🗑️
-          </button>
-        </td>
-      </tr>
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${formatDate(log.date)}</td>
+      <td>${escapeHtml(userName)}</td>
+      <td>
+        <span class="table-badge ${log.type === 'overtime' ? 'badge-overtime' : 'badge-timeoff'}">
+          ${log.type === 'overtime' ? 'Overtime' : 'Time Off'}
+        </span>
+      </td>
+      <td class="text-right">${log.factHours}</td>
+      <td class="text-right ${credited > 0 ? 'positive' : 'negative'}" style="font-weight: 600; color: ${credited > 0 ? 'var(--success)' : 'var(--danger)'}">
+        ${credited > 0 ? '+' : ''}${credited}
+      </td>
+      <td>${escapeHtml(log.comment || '')}${approvedByText}</td>
+      <td class="text-center">
+        <button class="table-action-btn" onclick="handleDeleteLog(${log.id})" title="Delete">
+          🗑️
+        </button>
+      </td>
     `;
-  }).join('');
+    tbody.appendChild(row);
+  });
+  
+  fragment.appendChild(tbody);
+  container.innerHTML = '';
+  container.appendChild(fragment);
 }
 
 // Add log entry (user)
@@ -491,13 +521,14 @@ async function handleAddLog(e) {
   const date = document.getElementById('logDate').value;
   const hours = parseFloat(document.getElementById('logHours').value);
   const comment = document.getElementById('logComment').value;
+  const approvedBy = type === 'timeoff' ? (document.getElementById('logApprovedBy')?.value || '') : '';
   
   if (!hours || hours <= 0) {
     alert('Please enter a valid number of hours');
     return;
   }
   
-  await saveLogEntry(currentUser.email, date, type, hours, comment, form);
+  await saveLogEntry(currentUser.email, date, type, hours, comment, approvedBy, form);
 }
 
 // Add log entry (admin)
@@ -509,24 +540,58 @@ async function handleAdminAddLog(e) {
   const date = document.getElementById('adminLogDate').value;
   const hours = parseFloat(document.getElementById('adminLogHours').value);
   const comment = document.getElementById('adminLogComment').value;
+  const approvedBy = type === 'timeoff' ? (document.getElementById('adminLogApprovedBy')?.value || '') : '';
   
   if (!hours || hours <= 0) {
     alert('Please enter a valid number of hours');
     return;
   }
   
-  await saveLogEntry(currentUser.email, date, type, hours, comment, form);
+  await saveLogEntry(currentUser.email, date, type, hours, comment, approvedBy, form);
 }
 
-// Save log entry
-async function saveLogEntry(userEmail, date, type, hours, comment, form) {
-  showLoading();
+// Save log entry with optimistic update
+async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, form) {
+  // Optimistic update - add entry immediately to UI
+  const factHours = hours;
+  const creditedHours = type === 'overtime' 
+    ? factHours * currentMultiplier 
+    : -factHours;
+  
+  const tempLog = {
+    id: 'temp-' + Date.now(),
+    userEmail: userEmail,
+    date: date,
+    type: type,
+    factHours: factHours,
+    creditedHours: creditedHours,
+    comment: comment,
+    approvedBy: approvedBy || ''
+  };
+  
+  // Add to current logs immediately
+  currentLogs.push(tempLog);
+  
+  // Update UI immediately
+  if (currentUser.role === 'admin') {
+    renderAdminView();
+  } else {
+    renderUserView();
+  }
+  
+  // Hide form immediately
+  if (form.id === 'addLogForm') {
+    resetForm();
+    document.getElementById('addLogForm').classList.add('hidden');
+    document.getElementById('addFormToggle').classList.remove('hidden');
+  } else {
+    resetAdminForm();
+    document.getElementById('adminAddLogForm').classList.add('hidden');
+    document.getElementById('adminAddFormToggle').classList.remove('hidden');
+  }
+  
+  // Save to server in background
   try {
-    const factHours = hours;
-    const creditedHours = type === 'overtime' 
-      ? factHours * currentMultiplier 
-      : -factHours;
-    
     const formData = new FormData();
     formData.append('userEmail', userEmail);
     formData.append('date', date);
@@ -534,6 +599,9 @@ async function saveLogEntry(userEmail, date, type, hours, comment, form) {
     formData.append('factHours', factHours.toString());
     formData.append('creditedHours', creditedHours.toString());
     formData.append('comment', comment);
+    if (approvedBy) {
+      formData.append('approvedBy', approvedBy);
+    }
     
     const res = await fetch(`${CONFIG.GAS_API_URL}?action=addLog`, {
       method: 'POST',
@@ -555,24 +623,30 @@ async function saveLogEntry(userEmail, date, type, hours, comment, form) {
     }
     
     if (data.success) {
-      if (form.id === 'addLogForm') {
-        resetForm();
-        document.getElementById('addLogForm').classList.add('hidden');
-        document.getElementById('addFormToggle').classList.remove('hidden');
-      } else {
-        resetAdminForm();
-        document.getElementById('adminAddLogForm').classList.add('hidden');
-        document.getElementById('adminAddFormToggle').classList.remove('hidden');
-      }
-      loadData();
+      // Remove temp entry and reload real data
+      currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+      await loadData();
     } else {
+      // Rollback on error
+      currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+      if (currentUser.role === 'admin') {
+        renderAdminView();
+      } else {
+        renderUserView();
+      }
       alert('Error: ' + data.message);
     }
   } catch (error) {
+    // Rollback on error
+    currentLogs = currentLogs.filter(log => !log.id.toString().startsWith('temp-'));
+    if (currentUser.role === 'admin') {
+      renderAdminView();
+    } else {
+      renderUserView();
+    }
     console.error('Save error:', error);
     alert('Save error: ' + error.message);
   }
-  hideLoading();
 }
 
 // Delete log entry
@@ -728,11 +802,15 @@ function resetForm() {
   const dateInput = document.getElementById('logDate');
   const hoursInput = document.getElementById('logHours');
   const commentInput = document.getElementById('logComment');
+  const approvedByInput = document.getElementById('logApprovedBy');
+  const approvedByGroup = document.getElementById('approvedByGroup');
   const form = document.getElementById('addLogForm');
   
   if (dateInput) dateInput.valueAsDate = new Date();
   if (hoursInput) hoursInput.value = '';
   if (commentInput) commentInput.value = '';
+  if (approvedByInput) approvedByInput.value = '';
+  if (approvedByGroup) approvedByGroup.style.display = 'none';
   if (form) {
     form.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
     const overtimeBtn = form.querySelector('.type-btn[data-type="overtime"]');
@@ -746,11 +824,15 @@ function resetAdminForm() {
   const dateInput = document.getElementById('adminLogDate');
   const hoursInput = document.getElementById('adminLogHours');
   const commentInput = document.getElementById('adminLogComment');
+  const approvedByInput = document.getElementById('adminLogApprovedBy');
+  const approvedByGroup = document.getElementById('adminApprovedByGroup');
   const form = document.getElementById('adminAddLogForm');
   
   if (dateInput) dateInput.valueAsDate = new Date();
   if (hoursInput) hoursInput.value = '';
   if (commentInput) commentInput.value = '';
+  if (approvedByInput) approvedByInput.value = '';
+  if (approvedByGroup) approvedByGroup.style.display = 'none';
   if (form) {
     form.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
     const overtimeBtn = form.querySelector('.type-btn[data-type="overtime"]');
