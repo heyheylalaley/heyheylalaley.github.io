@@ -520,7 +520,7 @@ function setupEventListeners() {
     adminCancelFormBtn.addEventListener('click', () => {
       adminAddLogForm.classList.add('hidden');
       adminAddFormToggle.classList.remove('hidden');
-      // resetAdminForm(); // Функция не реализована, так как админ форма не используется
+      resetAdminForm();
     });
   }
   
@@ -583,8 +583,9 @@ function setupEventListeners() {
     }
   }
   
-  // Form submission (addLogForm уже объявлена выше)
+  // Form submission
   if (addLogForm) addLogForm.addEventListener('submit', handleAddLog);
+  if (adminAddLogForm) adminAddLogForm.addEventListener('submit', handleAdminAddLog);
   
   // Admin buttons
   const settingsBtn = document.getElementById('settingsBtn');
@@ -1086,8 +1087,8 @@ function renderAdminLogs() {
       <tr>
         <td colspan="7" class="empty-state">
           ${allLogsCount === 0 
-            ? '<div class="empty-state-icon">📋</div><div class="empty-state-title">Нет записей</div><div class="empty-state-description">Записи о переработках и отгулах появятся здесь</div>'
-            : '<div class="empty-state-icon">🔍</div><div class="empty-state-title">Ничего не найдено</div><div class="empty-state-description">Попробуйте изменить фильтры или поисковый запрос</div>'
+            ? '<div class="empty-state-icon">📋</div><div class="empty-state-title">No entries</div><div class="empty-state-description">Overtime and time off entries will appear here</div>'
+            : '<div class="empty-state-icon">🔍</div><div class="empty-state-title">Nothing found</div><div class="empty-state-description">Try changing filters or search query</div>'
           }
         </td>
       </tr>
@@ -1178,6 +1179,44 @@ async function handleAddLog(e) {
   await saveLogEntry(currentUser.email, date, type, hours, comment, approvedBy, form);
 }
 
+// Add log entry (admin)
+async function handleAdminAddLog(e) {
+  e.preventDefault();
+  
+  const form = e.target;
+  const type = form.querySelector('.type-btn.active').dataset.type;
+  const date = document.getElementById('adminLogDate').value;
+  const hours = parseFloat(document.getElementById('adminLogHours').value);
+  const comment = document.getElementById('adminLogComment').value;
+  const approvedBy = type === 'timeoff' ? (document.getElementById('adminLogApprovedBy')?.value || '') : '';
+  
+  // Validation
+  if (!date) {
+    showToast('Please select a date', 'warning');
+    return;
+  }
+  
+  const dateObj = new Date(date);
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  if (dateObj > today) {
+    showToast('Cannot select future date', 'warning');
+    return;
+  }
+  
+  if (!hours || hours <= 0) {
+    showToast('Please enter a valid number of hours (minimum 0.25)', 'warning');
+    return;
+  }
+  
+  if (hours > 24) {
+    showToast('Hours cannot exceed 24 hours per day', 'warning');
+    return;
+  }
+  
+  await saveLogEntry(currentUser.email, date, type, hours, comment, approvedBy, form);
+}
+
 // Save log entry with optimistic update
 async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, form) {
   // Optimistic update - add entry immediately to UI
@@ -1208,13 +1247,20 @@ async function saveLogEntry(userEmail, date, type, hours, comment, approvedBy, f
   }
   
   // Hide form immediately with smooth transition
-  const formEl = document.getElementById('addLogForm');
-  const toggleEl = document.getElementById('addFormToggle');
+  // Determine which form was used (user or admin)
+  const isAdminForm = form && form.id === 'adminAddLogForm';
+  const formEl = isAdminForm ? document.getElementById('adminAddLogForm') : document.getElementById('addLogForm');
+  const toggleEl = isAdminForm ? document.getElementById('adminAddFormToggle') : document.getElementById('addFormToggle');
+  
   if (formEl) {
     formEl.style.opacity = '0';
     formEl.style.transform = 'translateY(-10px)';
     setTimeout(() => {
-      resetForm();
+      if (isAdminForm) {
+        resetAdminForm();
+      } else {
+        resetForm();
+      }
       formEl.classList.add('hidden');
       formEl.style.opacity = '';
       formEl.style.transform = '';
@@ -1522,7 +1568,13 @@ function resetForm() {
   const approvedByGroup = document.getElementById('approvedByGroup');
   const form = document.getElementById('addLogForm');
   
-  if (dateInput) dateInput.valueAsDate = new Date();
+  if (dateInput) {
+    try {
+      dateInput.valueAsDate = new Date();
+    } catch (e) {
+      // Ignore error if valueAsDate is not supported
+    }
+  }
   if (hoursInput) hoursInput.value = '';
   if (commentInput) commentInput.value = '';
   if (approvedByInput) approvedByInput.value = '';
@@ -1533,6 +1585,34 @@ function resetForm() {
     if (overtimeBtn) overtimeBtn.classList.add('active');
   }
   updateCreditedPreview();
+}
+
+// Reset admin form
+function resetAdminForm() {
+  const dateInput = document.getElementById('adminLogDate');
+  const hoursInput = document.getElementById('adminLogHours');
+  const commentInput = document.getElementById('adminLogComment');
+  const approvedByInput = document.getElementById('adminLogApprovedBy');
+  const approvedByGroup = document.getElementById('adminApprovedByGroup');
+  const form = document.getElementById('adminAddLogForm');
+  
+  if (dateInput) {
+    try {
+      dateInput.valueAsDate = new Date();
+    } catch (e) {
+      // Ignore error if valueAsDate is not supported
+    }
+  }
+  if (hoursInput) hoursInput.value = '';
+  if (commentInput) commentInput.value = '';
+  if (approvedByInput) approvedByInput.value = '';
+  if (approvedByGroup) approvedByGroup.style.display = 'none';
+  if (form) {
+    form.querySelectorAll('.type-btn').forEach(btn => btn.classList.remove('active'));
+    const overtimeBtn = form.querySelector('.type-btn[data-type="overtime"]');
+    if (overtimeBtn) overtimeBtn.classList.add('active');
+  }
+  updateAdminCreditedPreview();
 }
 
 // Выход

@@ -130,12 +130,12 @@
               <span>📅</span> Your History
             </h2>
             <button id="userExportBtn" class="btn btn-secondary btn-small">
-              <span>📥</span> Экспорт
+              <span>📥</span> Export
             </button>
           </div>
           <div class="search-container">
             <div class="search-wrapper">
-              <input type="text" id="userSearchInput" class="search-input" placeholder="Поиск по комментариям...">
+              <input type="text" id="userSearchInput" class="search-input" placeholder="Search by comments...">
             </div>
           </div>
           <div class="date-filters" id="userDateFilters">
@@ -171,6 +171,57 @@
                 <div class="balance-stat-value" id="adminTotalEntries">0</div>
               </div>
             </div>
+          </div>
+
+          <!-- Add Form for Admin -->
+          <div class="card" style="margin-top: 24px;">
+            <div id="adminAddFormToggle" class="add-form-toggle">
+              <button class="btn btn-primary btn-large">
+                <span>➕</span> Add Entry
+              </button>
+            </div>
+            <form id="adminAddLogForm" class="add-log-form hidden">
+              <h3>New Entry</h3>
+              
+              <div class="form-group">
+                <label>Type</label>
+                <div class="type-selector">
+                  <button type="button" class="type-btn active" data-type="overtime">
+                    Overtime
+                  </button>
+                  <button type="button" class="type-btn" data-type="timeoff">
+                    Time Off
+                  </button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="adminLogDate">Date</label>
+                <input type="date" id="adminLogDate" required>
+              </div>
+
+              <div class="form-group">
+                <label for="adminLogHours">Hours</label>
+                <input type="number" id="adminLogHours" step="0.25" min="0.25" max="24" required placeholder="e.g., 4.5" title="Enter hours worked (0.25 to 24)">
+                <p id="adminCreditedPreview" class="credited-preview"></p>
+                <small style="color: var(--gray-500); font-size: 12px; margin-top: 4px; display: block;">Minimum: 0.25 hours (15 min)</small>
+              </div>
+
+              <div class="form-group">
+                <label for="adminLogComment">Comment <span style="color: var(--gray-400); font-weight: normal;">(optional)</span></label>
+                <input type="text" id="adminLogComment" placeholder="e.g., Project X, urgent task" maxlength="200">
+              </div>
+
+              <div class="form-group" id="adminApprovedByGroup" style="display: none;">
+                <label for="adminLogApprovedBy">Approved By</label>
+                <input type="text" id="adminLogApprovedBy" placeholder="Manager name">
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save</button>
+                <button type="button" id="adminCancelFormBtn" class="btn btn-secondary">Cancel</button>
+              </div>
+            </form>
           </div>
           
         </div>
