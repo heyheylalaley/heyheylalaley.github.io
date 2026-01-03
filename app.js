@@ -24,8 +24,60 @@ let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 document.addEventListener('DOMContentLoaded', () => {
   initializeGoogleSignIn();
   setupEventListeners();
+  setupAuthListener();
   checkSupabaseSession();
 });
+
+// Настройка слушателя изменений авторизации
+function setupAuthListener() {
+  if (!supabaseClient) return;
+  
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    console.log('Auth state changed:', event, session);
+    
+    if (event === 'SIGNED_IN' && session) {
+      // Пользователь успешно вошел
+      try {
+        const { data: userData, error: userError } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('email', session.user.email)
+          .single();
+        
+        if (userData && !userError) {
+          currentUser = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role
+          };
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          showMainApp();
+          loadData();
+          showToast('Login successful', 'success');
+          
+          // Убираем hash из URL после успешного входа
+          if (window.location.hash) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } else {
+          showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        showToast('Error loading user data', 'error');
+      }
+    } else if (event === 'SIGNED_OUT') {
+      // Пользователь вышел
+      currentUser = null;
+      currentLogs = [];
+      currentUsers = [];
+      localStorage.removeItem('user');
+      document.getElementById('loginScreen').classList.remove('hidden');
+      document.getElementById('mainApp').classList.add('hidden');
+    }
+  });
+}
 
 // Проверка сессии Supabase
 async function checkSupabaseSession() {
@@ -59,19 +111,21 @@ async function checkSupabaseSession() {
       }
     }
     
-    // Обработка OAuth callback (если есть hash в URL)
-    const hashParams = new URLSearchParams(window.location.hash.substring(1));
-    if (hashParams.get('access_token')) {
-      // Убираем hash из URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+    // Обработка OAuth callback (если есть hash в URL с токеном)
+    // Supabase автоматически обрабатывает токен из hash при вызове getSession()
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      // Подождем немного, чтобы Supabase обработал токен
+      await new Promise(resolve => setTimeout(resolve, 200));
       
-      // Сессия уже установлена через hash, получаем пользователя
-      const { data: { user } } = await supabaseClient.auth.getUser();
-      if (user) {
+      // Проверим сессию снова после обработки токена
+      const { data: { session: newSession }, error: sessionError } = await supabaseClient.auth.getSession();
+      
+      if (newSession && !sessionError && !currentUser) {
+        // Сессия установлена, но пользователь еще не загружен
         const { data: userData, error: userError } = await supabaseClient
           .from('users')
           .select('*')
-          .eq('email', user.email)
+          .eq('email', newSession.user.email)
           .single();
         
         if (userData && !userError) {
@@ -87,6 +141,38 @@ async function checkSupabaseSession() {
           showToast('Login successful', 'success');
         } else {
           showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+        }
+        
+        // Убираем hash из URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } else if (window.location.hash === '#' && !currentUser) {
+      // Если hash пустой (#), но сессия может быть установлена после OAuth
+      // Проверим сессию еще раз
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const { data: { session: finalSession }, error: finalError } = await supabaseClient.auth.getSession();
+      
+      if (finalSession && !finalError) {
+        const { data: userData, error: userError } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('email', finalSession.user.email)
+          .single();
+        
+        if (userData && !userError) {
+          currentUser = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            role: userData.role
+          };
+          localStorage.setItem('user', JSON.stringify(currentUser));
+          showMainApp();
+          loadData();
+          showToast('Login successful', 'success');
+          
+          // Убираем hash из URL
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
       }
     }
