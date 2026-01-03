@@ -396,9 +396,30 @@ async function handleEmailRegister(e) {
   
   showLoading();
   try {
+    // Check if user already exists in our database
+    const normalizedEmail = email.toLowerCase().trim();
+    const { data: existingUser, error: checkError } = await supabaseClient
+      .from('users')
+      .select('email')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+    
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      throw checkError;
+    }
+    
+    if (existingUser) {
+      showToast('This email is already registered. Please sign in instead.', 'warning', 'Email Already Exists');
+      hideLoading();
+      return;
+    }
+    
+    // Check if user exists in Supabase Auth (even if not in our users table yet)
+    // We'll let Supabase handle this, but add better error handling
+    
     // Register user in Supabase Auth
     const { data: authData, error: authError } = await supabaseClient.auth.signUp({
-      email: email,
+      email: normalizedEmail,
       password: password,
       options: {
         data: {
@@ -408,17 +429,37 @@ async function handleEmailRegister(e) {
       }
     });
     
-    if (authError) throw authError;
+    if (authError) {
+      // Handle specific Supabase errors
+      if (authError.message.includes('already registered') || 
+          authError.message.includes('User already registered') ||
+          authError.message.includes('already exists')) {
+        showToast('This email is already registered. Please sign in instead.', 'warning', 'Email Already Exists');
+        hideLoading();
+        return;
+      }
+      throw authError;
+    }
     
     if (authData.user) {
-      // User will be created in users table by trigger
+      // User will be created in users table by trigger with role 'user' (never 'admin')
       // Wait a bit for trigger to complete
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Find user in database
-      const userData = await findUserByEmail(email);
+      const userData = await findUserByEmail(normalizedEmail);
       
       if (userData) {
+        // Ensure user has 'user' role (not admin) - security check
+        if (userData.role !== 'user') {
+          // This should never happen, but if it does, fix it
+          await supabaseClient
+            .from('users')
+            .update({ role: 'user' })
+            .eq('email', normalizedEmail);
+          userData.role = 'user';
+        }
+        
         currentUser = {
           id: userData.id,
           name: userData.name,

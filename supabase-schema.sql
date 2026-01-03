@@ -145,12 +145,13 @@ RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.users (email, name, role)
   VALUES (
-    LOWER(TRIM(NEW.email)), -- Нормализуем email: нижний регистр и убираем пробелы
+    LOWER(TRIM(NEW.email)), -- Normalize email: lowercase and trim spaces
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', SPLIT_PART(NEW.email, '@', 1)),
-    'user'
+    'user' -- Always 'user', never 'admin' for security
   )
   ON CONFLICT (email) DO UPDATE SET
-    name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', users.name);
+    name = COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', users.name),
+    role = 'user'; -- Ensure role is always 'user', never allow admin role through registration
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
