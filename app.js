@@ -239,44 +239,30 @@ async function checkSupabaseSession() {
     return;
   }
   
-  // IMMEDIATE: Show app from localStorage without waiting for async checks
-  const savedUser = localStorage.getItem('user');
-  if (savedUser) {
-    try {
-      const parsed = JSON.parse(savedUser);
-      if (parsed.email && parsed.id && parsed.role) {
-        currentUser = parsed;
-        showMainApp();
-        loadData();
-        console.log('Instant restore from localStorage');
-        
-        // Verify session in background (don't block UI)
-        supabaseClient.auth.getSession().then(({ data: { session }, error }) => {
-          if (!session || error) {
-            console.warn('Session invalid, logging out');
-            localStorage.removeItem('user');
-            currentUser = null;
-            document.getElementById('loginScreen').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
-          }
-        });
-        return;
-      }
-    } catch (e) {
-      localStorage.removeItem('user');
-    }
-  }
-  
   isCheckingSession = true;
   
   try {
-    // No localStorage - check Supabase session
+    // First, get Supabase session (this also restores from localStorage)
     const { data: { session }, error } = await supabaseClient.auth.getSession();
     
     if (session && !error) {
-      console.log('Session found for:', session.user.email);
+      // Session is valid - try to use cached user data
+      const savedUser = localStorage.getItem('user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          if (parsed.email?.toLowerCase() === session.user.email.toLowerCase() && parsed.id && parsed.role) {
+            currentUser = parsed;
+            showMainApp();
+            loadData();
+            console.log('Quick restore with valid session');
+            return;
+          }
+        } catch (e) {}
+      }
       
-      // Get user from database
+      // Fallback: get user from database
+      console.log('Getting user from database...');
       const userData = await findUserByEmail(session.user.email);
       
       if (userData) {
