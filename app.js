@@ -107,8 +107,11 @@ function setupAuthListener() {
         // Ждем немного, чтобы триггер успел создать пользователя
         await new Promise(resolve => setTimeout(resolve, 300));
         
+        // Нормализуем email для поиска
+        const normalizedEmail = session.user.email.toLowerCase().trim();
+        
         // Ищем пользователя с повторными попытками
-        const userData = await findUserByEmail(session.user.email);
+        const userData = await findUserByEmail(normalizedEmail);
         
         if (userData) {
           currentUser = {
@@ -127,8 +130,36 @@ function setupAuthListener() {
             window.history.replaceState({}, document.title, window.location.pathname);
           }
         } else {
-          console.error('User not found. Session email:', session.user.email);
-          showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+          console.error('User not found. Session email:', session.user.email, 'Normalized:', normalizedEmail);
+          // Попробуем создать пользователя, если его нет
+          const userName = session.user.user_metadata?.full_name || 
+                          session.user.user_metadata?.name || 
+                          normalizedEmail.split('@')[0];
+          
+          const { data: newUser, error: createError } = await supabaseClient
+            .from('users')
+            .insert({
+              email: normalizedEmail,
+              name: userName,
+              role: 'user'
+            })
+            .select()
+            .single();
+          
+          if (newUser && !createError) {
+            currentUser = {
+              id: newUser.id,
+              name: newUser.name,
+              email: newUser.email,
+              role: newUser.role
+            };
+            localStorage.setItem('user', JSON.stringify(currentUser));
+            showMainApp();
+            loadData();
+            showToast('Login successful', 'success');
+          } else {
+            showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+          }
         }
       } catch (error) {
         console.error('Error loading user data:', error);
@@ -229,8 +260,10 @@ async function checkSupabaseSession() {
       const { data: { session: finalSession }, error: finalError } = await supabaseClient.auth.getSession();
       
       if (finalSession && !finalError) {
+        // Нормализуем email для поиска
+        const normalizedEmail = finalSession.user.email.toLowerCase().trim();
         // Ищем пользователя с повторными попытками
-        const userData = await findUserByEmail(finalSession.user.email);
+        const userData = await findUserByEmail(normalizedEmail);
         
         if (userData) {
           currentUser = {
@@ -647,7 +680,9 @@ async function handleEmailLogin(e) {
         loadData();
         showToast('Login successful!', 'success');
       } else {
-        showToast('User not found in database. Contact administrator.', 'error', 'Login Error');
+        // Если пользователь все еще не найден, подождем еще и попробуем через onAuthStateChange
+        console.warn('User not found immediately, waiting for auth state change...');
+        // onAuthStateChange должен обработать это
       }
     }
   } catch (error) {
