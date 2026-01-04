@@ -35,10 +35,9 @@ Web application for tracking overtime and time off for employees.
 - ✅ Delete any entry
 - ✅ Delete users
 - ✅ Edit user names
-- ✅ Change user roles (assign/remove administrator role)
+- ✅ Change user roles (assign administrator role)
 - ✅ Acknowledge edited entries after approval
 - ✅ View change history for entries
-- ✅ Configure overtime multiplier
 - ✅ See edited entries indicators (⚠️ badge)
 - ✅ See acknowledged entries status (✓ Acknowledged badge)
 
