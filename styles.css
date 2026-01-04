@@ -201,10 +201,16 @@
   background: var(--bg-input);
   color: var(--text-primary);
   border-color: var(--border-color);
+  caret-color: var(--text-primary);
 }
 
 [data-theme="dark"] .search-input::placeholder {
   color: var(--text-muted);
+}
+
+[data-theme="dark"] .search-input:focus {
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
 
 body {
