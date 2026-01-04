@@ -477,6 +477,31 @@
     </div>
   </div>
 
+  <!-- Edit log entry modal -->
+  <div id="editLogModal" class="modal hidden">
+    <div class="modal-content" style="max-width: 450px;">
+      <h3>Edit Entry</h3>
+      <form id="editLogForm">
+        <div class="form-group">
+          <label for="editLogDate">Date</label>
+          <input type="date" id="editLogDate" required>
+        </div>
+        <div class="form-group">
+          <label for="editLogComment">Comment <span style="color: var(--gray-400); font-weight: normal;">(optional)</span></label>
+          <input type="text" id="editLogComment" placeholder="e.g., Project X, urgent task" maxlength="200">
+        </div>
+        <div class="form-group" id="editApprovedByGroup" style="display: none;">
+          <label for="editLogApprovedBy">Approved By</label>
+          <input type="text" id="editLogApprovedBy" placeholder="Manager name" maxlength="100">
+        </div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <button type="button" id="editLogCancelBtn" class="btn btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

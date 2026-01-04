@@ -213,6 +213,22 @@
   color: var(--text-primary);
 }
 
+[data-theme="dark"] .log-action-btn:hover {
+  background: var(--bg-input);
+}
+
+[data-theme="dark"] .log-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.2);
+}
+
+[data-theme="dark"] .log-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="dark"] .table-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.2);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-primary);
@@ -1027,7 +1043,12 @@ body {
   gap: 8px;
 }
 
-.log-delete-btn {
+.log-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.log-action-btn {
   background: transparent;
   border: none;
   cursor: pointer;
@@ -1038,13 +1059,29 @@ body {
   transition: all 0.2s;
 }
 
-.log-item:hover .log-delete-btn {
+.log-item:hover .log-action-btn {
   opacity: 0.6;
 }
 
-.log-delete-btn:hover {
+.log-action-btn:hover {
   opacity: 1 !important;
   background: var(--gray-100);
+}
+
+.log-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.log-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.table-edit-btn {
+  margin-right: 4px;
+}
+
+.table-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
 }
 
 /* Users List */
@@ -1744,7 +1781,7 @@ select:focus-visible {
     width: 100%;
   }
   
-  .log-delete-btn {
+  .log-action-btn {
     opacity: 0.6;
   }
   

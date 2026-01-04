@@ -23,6 +23,7 @@ let currentLogs = [];
 let currentUsers = [];
 let currentMultiplier = 1.5;
 let deleteLogId = null; // For delete modal
+let editLogId = null; // For edit modal
 let filteredLogs = []; // For search functionality
 let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 let sortOrder = 'desc'; // Sort order: 'desc' (newest first) or 'asc' (oldest first)
@@ -887,6 +888,46 @@ function hideDeleteUserModal() {
   }
 }
 
+function showEditLogModal(logId) {
+  const log = currentLogs.find(l => l.id == logId);
+  if (!log) return;
+  
+  editLogId = logId;
+  const modal = document.getElementById('editLogModal');
+  const dateInput = document.getElementById('editLogDate');
+  const commentInput = document.getElementById('editLogComment');
+  const approvedByInput = document.getElementById('editLogApprovedBy');
+  const approvedByGroup = document.getElementById('editApprovedByGroup');
+  
+  if (modal && dateInput && commentInput) {
+    // Set date value (convert from stored format to input format)
+    const dateStr = log.date.split('T')[0];
+    dateInput.value = dateStr;
+    
+    commentInput.value = log.comment || '';
+    
+    // Show/hide approved by field based on type
+    if (log.type === 'timeoff') {
+      approvedByGroup.style.display = 'block';
+      approvedByInput.value = log.approvedBy || '';
+    } else {
+      approvedByGroup.style.display = 'none';
+      approvedByInput.value = '';
+    }
+    
+    modal.classList.remove('hidden');
+    commentInput.focus();
+  }
+}
+
+function hideEditLogModal() {
+  editLogId = null;
+  const modal = document.getElementById('editLogModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
 // Setup event listeners
 function setupEventListeners() {
   // Theme toggle
@@ -1080,6 +1121,16 @@ function setupEventListeners() {
     deleteUserCancelBtn.addEventListener('click', hideDeleteUserModal);
   }
   
+  // Edit log modal
+  const editLogForm = document.getElementById('editLogForm');
+  const editLogCancelBtn = document.getElementById('editLogCancelBtn');
+  if (editLogForm) {
+    editLogForm.addEventListener('submit', handleEditLog);
+  }
+  if (editLogCancelBtn) {
+    editLogCancelBtn.addEventListener('click', hideEditLogModal);
+  }
+  
   // Close modals on backdrop click
   const modals = document.querySelectorAll('.modal');
   modals.forEach(modal => {
@@ -1222,6 +1273,7 @@ function setupEventListeners() {
       hideDeleteModal();
       hideEditNameModal();
       hideDeleteUserModal();
+      hideEditLogModal();
     }
   });
 }
@@ -1783,9 +1835,14 @@ function renderUserLogs() {
           <div class="log-credited ${credited > 0 ? 'positive' : 'negative'}">
             ${credited > 0 ? '+' : ''}${credited} hrs
           </div>
-          <button class="log-delete-btn" onclick="showDeleteModal(${log.id})" title="Delete entry">
-            🗑️
-          </button>
+          <div class="log-actions">
+            <button class="log-action-btn log-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit entry">
+              ✏️
+            </button>
+            <button class="log-action-btn log-delete-btn" onclick="showDeleteModal(${log.id})" title="Delete entry">
+              🗑️
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -2010,6 +2067,9 @@ function renderAdminLogs() {
       </td>
       <td>${escapeHtml(log.comment || '')}${approvedByText}</td>
       <td class="text-center">
+        <button class="table-action-btn table-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit">
+          ✏️
+        </button>
         <button class="table-action-btn" onclick="showDeleteModal(${log.id})" title="Delete">
           🗑️
         </button>
@@ -2279,6 +2339,92 @@ async function handleDeleteLog(logId) {
   }
 }
 
+// Edit log entry
+async function handleEditLog(e) {
+  e.preventDefault();
+  
+  if (!editLogId) return;
+  
+  const log = currentLogs.find(l => l.id == editLogId);
+  if (!log) {
+    hideEditLogModal();
+    return;
+  }
+  
+  const newDate = document.getElementById('editLogDate').value;
+  const newComment = document.getElementById('editLogComment').value.trim();
+  const newApprovedBy = log.type === 'timeoff' 
+    ? document.getElementById('editLogApprovedBy').value.trim() 
+    : '';
+  
+  // Validation
+  if (!newDate) {
+    showToast('Please select a date', 'warning');
+    return;
+  }
+  
+  // Check if anything changed
+  const oldDateStr = log.date.split('T')[0];
+  if (newDate === oldDateStr && newComment === (log.comment || '') && newApprovedBy === (log.approvedBy || '')) {
+    hideEditLogModal();
+    return;
+  }
+  
+  // Store old values for rollback
+  const oldDate = log.date;
+  const oldComment = log.comment;
+  const oldApprovedBy = log.approvedBy;
+  
+  // Optimistic update
+  log.date = newDate;
+  log.comment = newComment;
+  log.approvedBy = newApprovedBy;
+  
+  // Update UI immediately
+  if (currentUser.role === 'admin') {
+    renderAdminView();
+  } else {
+    renderUserView();
+  }
+  
+  hideEditLogModal();
+  
+  // Save to Supabase
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    const { error } = await supabaseClient
+      .from('logs')
+      .update({
+        date: newDate,
+        comment: newComment,
+        approved_by: newApprovedBy
+      })
+      .eq('id', editLogId);
+    
+    if (error) throw error;
+    
+    showToast('Entry updated', 'success');
+  } catch (error) {
+    // Rollback on error
+    log.date = oldDate;
+    log.comment = oldComment;
+    log.approvedBy = oldApprovedBy;
+    
+    if (currentUser.role === 'admin') {
+      renderAdminView();
+    } else {
+      renderUserView();
+    }
+    
+    console.error('Edit error:', error);
+    showToast('Error updating entry: ' + error.message, 'error', 'Error');
+  }
+}
+
 // Update user name
 async function handleUpdateName() {
   const input = document.getElementById('nameInput');
@@ -2523,5 +2669,6 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Export function for global use
+// Export functions for global use
 window.showDeleteModal = showDeleteModal;
+window.showEditLogModal = showEditLogModal;
