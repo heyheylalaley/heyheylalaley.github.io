@@ -138,6 +138,12 @@
   color: var(--text-secondary);
 }
 
+[data-theme="dark"] .user-edit-name-btn:hover,
+[data-theme="dark"] .user-role-btn:hover,
+[data-theme="dark"] .user-delete-btn:hover {
+  background: var(--gray-800);
+}
+
 [data-theme="dark"] .logs-table th {
   background: var(--bg-input);
 }
@@ -1236,6 +1242,15 @@ body {
   flex: 1;
 }
 
+.user-card-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.user-edit-name-btn,
+.user-role-btn,
 .user-delete-btn {
   background: transparent;
   border: none;
@@ -1249,10 +1264,25 @@ body {
   line-height: 1;
 }
 
+.user-edit-name-btn:hover,
+.user-role-btn:hover,
 .user-delete-btn:hover {
   opacity: 1;
   background: var(--gray-100);
   transform: scale(1.1);
+}
+
+.user-edit-name-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
+}
+
+.user-role-btn.admin {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.user-role-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
 }
 
 .user-info h3 {

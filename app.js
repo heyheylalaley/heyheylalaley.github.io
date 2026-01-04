@@ -888,6 +888,47 @@ function hideDeleteUserModal() {
   }
 }
 
+function showEditUserNameModal(userEmail, userName) {
+  const modal = document.getElementById('editUserNameModal');
+  const input = document.getElementById('userNameInput');
+  if (modal && input) {
+    input.value = userName;
+    modal.dataset.userEmail = userEmail;
+    modal.classList.remove('hidden');
+    input.focus();
+    input.select();
+  }
+}
+
+function hideEditUserNameModal() {
+  const modal = document.getElementById('editUserNameModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    delete modal.dataset.userEmail;
+  }
+}
+
+function showChangeRoleModal(userEmail, userName, currentRole, newRole) {
+  const modal = document.getElementById('changeRoleModal');
+  const message = document.getElementById('changeRoleMessage');
+  if (modal && message) {
+    const roleText = newRole === 'admin' ? 'administrator' : 'regular user';
+    message.textContent = `Are you sure you want to change "${userName}" (${userEmail}) role to ${roleText}?`;
+    modal.dataset.userEmail = userEmail;
+    modal.dataset.newRole = newRole;
+    modal.classList.remove('hidden');
+  }
+}
+
+function hideChangeRoleModal() {
+  const modal = document.getElementById('changeRoleModal');
+  if (modal) {
+    modal.classList.add('hidden');
+    delete modal.dataset.userEmail;
+    delete modal.dataset.newRole;
+  }
+}
+
 // Edit log modal functions
 function showEditLogModal(logId) {
   const log = currentLogs.find(l => l.id == logId);
@@ -1118,6 +1159,52 @@ function setupEventListeners() {
     deleteUserCancelBtn.addEventListener('click', hideDeleteUserModal);
   }
   
+  // Edit user name modal (admin)
+  const userNameConfirmBtn = document.getElementById('userNameConfirmBtn');
+  const userNameCancelBtn = document.getElementById('userNameCancelBtn');
+  if (userNameConfirmBtn) {
+    userNameConfirmBtn.addEventListener('click', () => {
+      const modal = document.getElementById('editUserNameModal');
+      const input = document.getElementById('userNameInput');
+      if (modal && modal.dataset.userEmail && input) {
+        handleUpdateUserName(modal.dataset.userEmail, input.value);
+        hideEditUserNameModal();
+      }
+    });
+  }
+  if (userNameCancelBtn) {
+    userNameCancelBtn.addEventListener('click', hideEditUserNameModal);
+  }
+  
+  // Enter key support for edit user name modal
+  const userNameInput = document.getElementById('userNameInput');
+  if (userNameInput) {
+    userNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (userNameConfirmBtn) {
+          userNameConfirmBtn.click();
+        }
+      }
+    });
+  }
+  
+  // Change role modal
+  const changeRoleConfirmBtn = document.getElementById('changeRoleConfirmBtn');
+  const changeRoleCancelBtn = document.getElementById('changeRoleCancelBtn');
+  if (changeRoleConfirmBtn) {
+    changeRoleConfirmBtn.addEventListener('click', () => {
+      const modal = document.getElementById('changeRoleModal');
+      if (modal && modal.dataset.userEmail && modal.dataset.newRole) {
+        handleUpdateUserRole(modal.dataset.userEmail, modal.dataset.newRole);
+        hideChangeRoleModal();
+      }
+    });
+  }
+  if (changeRoleCancelBtn) {
+    changeRoleCancelBtn.addEventListener('click', hideChangeRoleModal);
+  }
+  
   // Edit log modal
   const editLogForm = document.getElementById('editLogForm');
   const editLogCancelBtn = document.getElementById('editLogCancelBtn');
@@ -1258,6 +1345,8 @@ function setupEventListeners() {
       hideDeleteModal();
       hideEditNameModal();
       hideDeleteUserModal();
+      hideEditUserNameModal();
+      hideChangeRoleModal();
       hideEditLogModal();
     }
   });
@@ -1950,11 +2039,12 @@ function renderUsersList() {
   container.innerHTML = userBalances.map(user => {
     const balance = user.balance;
     const isCurrentUser = user.email === currentUser.email;
+    const isAdmin = user.role === 'admin';
     return `
       <div class="user-card" data-email="${user.email}">
         <div class="user-card-content">
           <div class="user-info">
-            <h3>${escapeHtml(user.name)}</h3>
+            <h3>${escapeHtml(user.name)} ${isAdmin ? '<span style="color: var(--primary); font-size: 0.8em;">👑</span>' : ''}</h3>
             <p>${escapeHtml(user.email)}</p>
           </div>
           <div class="user-balance">
@@ -1964,11 +2054,19 @@ function renderUsersList() {
             <div class="user-balance-label">balance</div>
           </div>
         </div>
-        ${!isCurrentUser ? `
-          <button class="user-delete-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Delete user">
-            🗑️
-          </button>
-        ` : ''}
+        <div class="user-card-actions">
+          ${!isCurrentUser ? `
+            <button class="user-edit-name-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Edit name">
+              ✏️
+            </button>
+            <button class="user-role-btn ${isAdmin ? 'admin' : ''}" data-email="${user.email}" data-role="${user.role}" data-name="${escapeHtml(user.name)}" title="${isAdmin ? 'Remove admin role' : 'Make admin'}">
+              ${isAdmin ? '👑' : '👤'}
+            </button>
+            <button class="user-delete-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Delete user">
+              🗑️
+            </button>
+          ` : ''}
+        </div>
       </div>
     `;
   }).join('');
@@ -1985,9 +2083,33 @@ function renderUsersList() {
       });
     }
     
+    const editNameBtn = card.querySelector('.user-edit-name-btn');
+    if (editNameBtn) {
+      editNameBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const email = editNameBtn.dataset.email;
+        const name = editNameBtn.dataset.name;
+        showEditUserNameModal(email, name);
+      });
+    }
+    
+    const roleBtn = card.querySelector('.user-role-btn');
+    if (roleBtn) {
+      roleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const email = roleBtn.dataset.email;
+        const currentRole = roleBtn.dataset.role;
+        const name = roleBtn.dataset.name;
+        const newRole = currentRole === 'admin' ? 'user' : 'admin';
+        showChangeRoleModal(email, name, currentRole, newRole);
+      });
+    }
+    
     card.addEventListener('click', (e) => {
-      // Don't trigger selection if clicking delete button
-      if (e.target.closest('.user-delete-btn')) return;
+      // Don't trigger selection if clicking action buttons
+      if (e.target.closest('.user-delete-btn') || 
+          e.target.closest('.user-edit-name-btn') || 
+          e.target.closest('.user-role-btn')) return;
       
       const email = card.dataset.email;
       const isSelected = card.classList.contains('selected');
@@ -2751,6 +2873,76 @@ async function handleDeleteUser(userEmail) {
   } catch (error) {
     console.error('Delete user error:', error);
     showToast('Error deleting user: ' + error.message, 'error', 'Error');
+  }
+}
+
+// Update user name (admin only)
+async function handleUpdateUserName(userEmail, newName) {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  if (!newName || !newName.trim()) {
+    showToast('Please enter a name', 'warning');
+    return;
+  }
+  
+  const trimmedName = newName.trim();
+  
+  try {
+    const { error } = await supabaseClient
+      .from('users')
+      .update({ name: trimmedName })
+      .eq('email', userEmail);
+    
+    if (error) throw error;
+    
+    showToast('User name successfully updated', 'success');
+    
+    // Reload data
+    await loadUsers();
+    renderAdminView();
+  } catch (error) {
+    console.error('Update user name error:', error);
+    showToast('Error updating user name: ' + error.message, 'error', 'Error');
+  }
+}
+
+// Update user role (admin only)
+async function handleUpdateUserRole(userEmail, newRole) {
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  if (userEmail === currentUser.email) {
+    showToast('You cannot change your own role', 'error', 'Error');
+    return;
+  }
+  
+  if (!['user', 'admin'].includes(newRole)) {
+    showToast('Invalid role', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    const { error } = await supabaseClient
+      .from('users')
+      .update({ role: newRole })
+      .eq('email', userEmail);
+    
+    if (error) throw error;
+    
+    const roleText = newRole === 'admin' ? 'administrator' : 'regular user';
+    showToast(`User role successfully changed to ${roleText}`, 'success');
+    
+    // Reload data
+    await loadUsers();
+    renderAdminView();
+  } catch (error) {
+    console.error('Update user role error:', error);
+    showToast('Error updating user role: ' + error.message, 'error', 'Error');
   }
 }
 

@@ -455,6 +455,33 @@
     </div>
   </div>
 
+  <!-- Edit user name modal (admin) -->
+  <div id="editUserNameModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Edit User Name</h3>
+      <div class="form-group">
+        <label for="userNameInput">Name:</label>
+        <input type="text" id="userNameInput" maxlength="100" required>
+      </div>
+      <div class="modal-actions">
+        <button id="userNameConfirmBtn" class="btn btn-primary">Save</button>
+        <button id="userNameCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change role modal -->
+  <div id="changeRoleModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Change User Role</h3>
+      <p id="changeRoleMessage"></p>
+      <div class="modal-actions">
+        <button id="changeRoleConfirmBtn" class="btn btn-primary">Confirm</button>
+        <button id="changeRoleCancelBtn" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Delete user confirmation modal -->
   <div id="deleteUserModal" class="modal hidden">
     <div class="modal-content">
