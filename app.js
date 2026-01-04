@@ -1810,8 +1810,14 @@ function renderUserLogs() {
       ? `<span class="history-badge" onclick="showChangeHistoryModal(${log.id})" title="View change history (${log.changeHistory.length} changes)" style="margin-left: 8px;">📜 ${log.changeHistory.length}</span>` 
       : '';
     
+    // Check if user can delete this entry (within 5 minutes of creation)
+    const canDelete = canUserDeleteLog(log);
+    const deleteBtn = canDelete 
+      ? `<button class="log-delete-btn" onclick="showDeleteModal(${log.id})" title="Delete entry (available for ${getRemainingDeleteTime(log)})">🗑️</button>`
+      : '';
+    
     tempDiv.innerHTML = `
-      <div class="log-item" style="opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease ${index * 0.05}s, transform 0.3s ease ${index * 0.05}s;">
+      <div class="log-item" style="opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease ${index * 0.05}s, transform 0.3s ease ${index * 0.05}s;" data-log-id="${log.id}" data-created-at="${log.createdAt}">
         <div class="log-item-left">
           <div>
             <span class="log-badge ${log.type === 'overtime' ? 'badge-overtime' : 'badge-timeoff'}">
@@ -1819,6 +1825,7 @@ function renderUserLogs() {
             </span>
             <span class="log-date">${formatDate(log.date)}</span>
             ${historyBadge}
+            ${canDelete ? `<span class="delete-timer-badge" data-log-id="${log.id}">⏱️ ${getRemainingDeleteTime(log)}</span>` : ''}
           </div>
           <div class="log-details">
             Actual: <strong>${log.factHours} hrs</strong>
@@ -1836,9 +1843,12 @@ function renderUserLogs() {
           <div class="log-credited ${credited > 0 ? 'positive' : 'negative'}">
             ${credited > 0 ? '+' : ''}${credited} hrs
           </div>
-          <button class="log-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit entry">
-            ✏️
-          </button>
+          <div style="display: flex; gap: 4px;">
+            <button class="log-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit entry">
+              ✏️
+            </button>
+            ${deleteBtn}
+          </div>
         </div>
       </div>
     `;
@@ -1854,6 +1864,11 @@ function renderUserLogs() {
   
   container.innerHTML = '';
   container.appendChild(fragment);
+  
+  // Start timer updates if there are any deletable entries
+  if (document.querySelectorAll('.delete-timer-badge').length > 0) {
+    startDeleteTimerUpdates();
+  }
 }
 
 // Render admin view
@@ -2266,6 +2281,16 @@ async function handleDeleteLog(logId) {
   // Find log to delete
   const logToDelete = currentLogs.find(log => log.id == logId);
   if (!logToDelete) return;
+  
+  // Check if user can delete (admin can always delete, users only within 5 minutes)
+  if (currentUser.role !== 'admin') {
+    if (!canUserDeleteLog(logToDelete)) {
+      showToast('Time to delete has expired (5 minute limit)', 'warning');
+      // Re-render to remove delete button
+      renderUserView();
+      return;
+    }
+  }
   
   // Remove from UI immediately (optimistic)
   currentLogs = currentLogs.filter(log => log.id != logId);
@@ -2793,6 +2818,75 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// Check if user can delete a log entry (within 5 minutes of creation)
+function canUserDeleteLog(log) {
+  if (!log.createdAt) return false;
+  
+  const createdAt = new Date(log.createdAt);
+  const now = new Date();
+  const diffMs = now - createdAt;
+  const fiveMinutesMs = 5 * 60 * 1000;
+  
+  return diffMs < fiveMinutesMs;
+}
+
+// Get remaining time for delete permission
+function getRemainingDeleteTime(log) {
+  if (!log.createdAt) return '0:00';
+  
+  const createdAt = new Date(log.createdAt);
+  const now = new Date();
+  const diffMs = now - createdAt;
+  const fiveMinutesMs = 5 * 60 * 1000;
+  const remainingMs = Math.max(0, fiveMinutesMs - diffMs);
+  
+  const minutes = Math.floor(remainingMs / 60000);
+  const seconds = Math.floor((remainingMs % 60000) / 1000);
+  
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Timer to update delete buttons visibility
+let deleteTimerInterval = null;
+
+function startDeleteTimerUpdates() {
+  // Clear existing interval
+  if (deleteTimerInterval) {
+    clearInterval(deleteTimerInterval);
+  }
+  
+  // Update every second
+  deleteTimerInterval = setInterval(() => {
+    // Update timer badges
+    const timerBadges = document.querySelectorAll('.delete-timer-badge');
+    timerBadges.forEach(badge => {
+      const logId = badge.dataset.logId;
+      const log = currentLogs.find(l => l.id == logId);
+      if (log) {
+        if (canUserDeleteLog(log)) {
+          badge.textContent = `⏱️ ${getRemainingDeleteTime(log)}`;
+        } else {
+          // Time expired - re-render to hide delete button
+          badge.remove();
+          const logItem = document.querySelector(`.log-item[data-log-id="${logId}"]`);
+          if (logItem) {
+            const deleteBtn = logItem.querySelector('.log-delete-btn');
+            if (deleteBtn) {
+              deleteBtn.remove();
+            }
+          }
+        }
+      }
+    });
+    
+    // Stop interval if no more timers
+    if (document.querySelectorAll('.delete-timer-badge').length === 0) {
+      clearInterval(deleteTimerInterval);
+      deleteTimerInterval = null;
+    }
+  }, 1000);
 }
 
 // Show change history modal

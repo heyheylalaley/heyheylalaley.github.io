@@ -145,9 +145,15 @@ CREATE POLICY "Users can update own logs" ON logs
     OR public.is_admin()
   );
 
--- Только админы могут удалять логи
-CREATE POLICY "Admins can delete logs" ON logs
-  FOR DELETE USING (public.is_admin());
+-- Пользователи могут удалять свои логи в течение 5 минут после создания, админы - любые
+CREATE POLICY "Users can delete own logs within 5 minutes or admins" ON logs
+  FOR DELETE USING (
+    public.is_admin() 
+    OR (
+      LOWER(TRIM(user_email)) = LOWER(TRIM(auth.jwt() ->> 'email'))
+      AND created_at > NOW() - INTERVAL '5 minutes'
+    )
+  );
 
 -- Политики безопасности для таблицы settings
 -- Удаляем существующие политики перед созданием новых
