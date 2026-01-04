@@ -2375,6 +2375,9 @@ async function handleEditLog(e) {
   const oldComment = log.comment;
   const oldApprovedBy = log.approvedBy;
   
+  // Store ID before hiding modal (hideEditLogModal sets editLogId to null)
+  const logIdToUpdate = editLogId;
+  
   // Optimistic update
   log.date = newDate;
   log.comment = newComment;
@@ -2403,7 +2406,7 @@ async function handleEditLog(e) {
         comment: newComment,
         approved_by: newApprovedBy
       })
-      .eq('id', editLogId);
+      .eq('id', logIdToUpdate);
     
     if (error) throw error;
     
