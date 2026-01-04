@@ -98,10 +98,55 @@ export const createLog = async (userEmail, date, type, hours, comment, multiplie
   };
 };
 
-export const updateLog = async (logId, updates) => {
+export const updateLog = async (logId, updates, currentUser, oldLog) => {
+  // If change_history is provided, use it; otherwise build it from oldLog
+  let updateData = { ...updates };
+  
+  if (oldLog && currentUser) {
+    const editedAt = new Date().toISOString();
+    updateData.edited_at = editedAt;
+    
+    // Build change history if not provided
+    if (!updateData.change_history) {
+      const wasApproved = oldLog.type === 'timeoff' && oldLog.approvedBy;
+      const oldChangeHistory = oldLog.changeHistory || [];
+      
+      // Build changes object
+      const changes = {};
+      if (updates.date && updates.date !== oldLog.date) {
+        changes.date = { from: oldLog.date, to: updates.date };
+      }
+      if (updates.fact_hours && updates.fact_hours !== oldLog.factHours) {
+        changes.hours = { from: oldLog.factHours, to: updates.fact_hours };
+      }
+      if (updates.comment !== undefined && updates.comment !== (oldLog.comment || '')) {
+        changes.comment = { from: oldLog.comment || '', to: updates.comment || '' };
+      }
+      
+      // Create history record
+      const historyRecord = {
+        changedAt: editedAt,
+        changedBy: currentUser.name,
+        changedByEmail: currentUser.email,
+        wasApproved: wasApproved,
+        approvedBy: oldLog.approvedBy || null,
+        changes: changes
+      };
+      
+      // Append to change history
+      const newChangeHistory = [...oldChangeHistory, historyRecord];
+      updateData.change_history = newChangeHistory;
+      
+      // If entry was acknowledged and is being edited, reset acknowledged_by
+      if (oldLog.acknowledgedBy && wasApproved) {
+        updateData.acknowledged_by = null;
+      }
+    }
+  }
+  
   const { data, error } = await supabase
     .from('logs')
-    .update(updates)
+    .update(updateData)
     .eq('id', logId)
     .select(`
       *,
@@ -160,4 +205,5 @@ export const acknowledgeEdit = async (logId, adminName) => {
   if (error) throw error;
   return data;
 };
+
 

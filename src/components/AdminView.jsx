@@ -9,6 +9,10 @@ import QuickAddButtons from './user/QuickAddButtons';
 import AddLogForm from './user/AddLogForm';
 import EditLogModal from './modals/EditLogModal';
 import DeleteConfirmModal from './modals/DeleteConfirmModal';
+import EditUserNameModal from './modals/EditUserNameModal';
+import ChangeRoleModal from './modals/ChangeRoleModal';
+import DeleteUserModal from './modals/DeleteUserModal';
+import ChangeHistoryModal from './modals/ChangeHistoryModal';
 import './AdminView.css';
 
 function AdminView({ onRefresh }) {
@@ -38,6 +42,17 @@ function AdminView({ onRefresh }) {
   const [selectedUserEmail, setSelectedUserEmail] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  // Modal states
+  const [editUserEmail, setEditUserEmail] = useState(null);
+  const [editUserName, setEditUserName] = useState(null);
+  const [changeRoleEmail, setChangeRoleEmail] = useState(null);
+  const [changeRoleName, setChangeRoleName] = useState(null);
+  const [changeRoleCurrent, setChangeRoleCurrent] = useState(null);
+  const [changeRoleNew, setChangeRoleNew] = useState(null);
+  const [deleteUserEmail, setDeleteUserEmail] = useState(null);
+  const [deleteUserName, setDeleteUserName] = useState(null);
+  const [historyLogId, setHistoryLogId] = useState(null);
 
   // Calculate admin's balance
   const adminLogs = useMemo(() => 
@@ -114,12 +129,17 @@ function AdminView({ onRefresh }) {
         ? factHours * currentMultiplier
         : -factHours;
       
-      const updated = await updateLog(logId, {
-        date,
-        fact_hours: factHours,
-        credited_hours: creditedHours,
-        comment: comment || null
-      });
+      const updated = await updateLog(
+        logId,
+        {
+          date,
+          fact_hours: factHours,
+          credited_hours: creditedHours,
+          comment: comment || null
+        },
+        currentUser,
+        log
+      );
       
       updateLogStore(logId, updated);
       setEditLogId(null);
@@ -168,7 +188,88 @@ function AdminView({ onRefresh }) {
     }
   };
 
+  const handleAcknowledgeEdit = async (logId) => {
+    if (loading) return;
+    setLoading(true);
+    
+    try {
+      await acknowledgeEdit(logId, currentUser.name);
+      const updated = filteredLogs.find(l => l.id === logId);
+      if (updated) {
+        updateLogStore(logId, { ...updated, acknowledgedBy: currentUser.name });
+      }
+      showToast('Entry acknowledged', 'success');
+      onRefresh();
+    } catch (error) {
+      showToast(error.message, 'error', 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateUserName = async (userEmail, newName) => {
+    if (loading) return;
+    setLoading(true);
+    
+    try {
+      await updateUserName(userEmail, newName);
+      updateUserStore(userEmail, { name: newName });
+      setEditUserEmail(null);
+      setEditUserName(null);
+      showToast('User name updated successfully', 'success');
+      onRefresh();
+    } catch (error) {
+      showToast(error.message, 'error', 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateUserRole = async (userEmail, newRole) => {
+    if (loading) return;
+    setLoading(true);
+    
+    try {
+      if (userEmail === currentUser.email) {
+        showToast('You cannot change your own role', 'error', 'Error');
+        return;
+      }
+      
+      await updateUserRole(userEmail, newRole);
+      updateUserStore(userEmail, { role: newRole });
+      setChangeRoleEmail(null);
+      setChangeRoleName(null);
+      setChangeRoleCurrent(null);
+      setChangeRoleNew(null);
+      showToast(`User role successfully changed to ${newRole === 'admin' ? 'administrator' : 'regular user'}`, 'success');
+      onRefresh();
+    } catch (error) {
+      showToast(error.message, 'error', 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deleteUserEmail || loading) return;
+    setLoading(true);
+    
+    try {
+      await deleteUser(deleteUserEmail);
+      removeUserStore(deleteUserEmail);
+      setDeleteUserEmail(null);
+      setDeleteUserName(null);
+      showToast('User deleted successfully', 'success');
+      onRefresh();
+    } catch (error) {
+      showToast(error.message, 'error', 'Error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logToEdit = editLogId ? filteredLogs.find(l => l.id === editLogId) : null;
+  const historyLog = historyLogId ? filteredLogs.find(l => l.id === historyLogId) : null;
 
   return (
     <div className="admin-view">
@@ -219,17 +320,53 @@ function AdminView({ onRefresh }) {
                     <h3>{user.name}</h3>
                     <p>{user.email}</p>
                     <div className="user-balance-label">Balance: {formatHours(userBalance)}</div>
+                    {user.role === 'admin' && (
+                      <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '4px' }}>
+                        👑 Administrator
+                      </div>
+                    )}
                   </div>
                   <div className="user-actions">
                     <button
                       className="btn btn-secondary btn-small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Edit name functionality would go here
+                        setEditUserEmail(user.email);
+                        setEditUserName(user.name);
                       }}
+                      title="Edit name"
                     >
-                      Edit
+                      ✏️
                     </button>
+                    {user.email !== currentUser.email && (
+                      <>
+                        <button
+                          className="btn btn-secondary btn-small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newRole = user.role === 'admin' ? 'user' : 'admin';
+                            setChangeRoleEmail(user.email);
+                            setChangeRoleName(user.name);
+                            setChangeRoleCurrent(user.role);
+                            setChangeRoleNew(newRole);
+                          }}
+                          title="Change role"
+                        >
+                          {user.role === 'admin' ? '👤' : '👑'}
+                        </button>
+                        <button
+                          className="btn btn-danger btn-small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteUserEmail(user.email);
+                            setDeleteUserName(user.name);
+                          }}
+                          title="Delete user"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -290,10 +427,25 @@ function AdminView({ onRefresh }) {
                 {filteredLogs.map(log => {
                   const credited = parseFloat(log.creditedHours) || 0;
                   const userName = users.find(u => u.email === log.userEmail)?.name || log.userEmail;
+                  const hasHistory = log.changeHistory && log.changeHistory.length > 0;
+                  const wasApproved = log.type === 'timeoff' && log.approvedBy;
+                  const needsAcknowledgment = wasApproved && log.editedAt && !log.acknowledgedBy;
                   
                   return (
                     <tr key={log.id}>
-                      <td>{formatDate(log.date)}</td>
+                      <td>
+                        {formatDate(log.date)}
+                        {hasHistory && (
+                          <span
+                            className="history-badge"
+                            onClick={() => setHistoryLogId(log.id)}
+                            title={`View change history (${log.changeHistory.length} changes)`}
+                            style={{ marginLeft: '8px', cursor: 'pointer' }}
+                          >
+                            📜 {log.changeHistory.length}
+                          </span>
+                        )}
+                      </td>
                       <td>{userName}</td>
                       <td>
                         <span className={`log-badge ${log.type === 'overtime' ? 'badge-overtime' : 'badge-timeoff'}`}>
@@ -304,7 +456,29 @@ function AdminView({ onRefresh }) {
                       <td className={`text-right ${credited > 0 ? 'positive' : 'negative'}`}>
                         {credited > 0 ? '+' : ''}{credited}
                       </td>
-                      <td>{log.comment || '-'}</td>
+                      <td>
+                        {log.comment || '-'}
+                        {wasApproved && (
+                          <div style={{ fontSize: '11px', color: 'var(--gray-600)', marginTop: '4px' }}>
+                            Approved by: {log.approvedBy}
+                            {log.editedAt && (
+                              <span className="edited-badge" title="Edited after approval" style={{ marginLeft: '8px' }}>
+                                ⚠️
+                              </span>
+                            )}
+                            {log.acknowledgedBy && (
+                              <span className="acknowledged-badge" title={`Acknowledged by ${log.acknowledgedBy}`} style={{ marginLeft: '8px' }}>
+                                ✓ Acknowledged
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {log.editedAt && !wasApproved && !hasHistory && (
+                          <div style={{ fontSize: '11px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                            ✏️ edited
+                          </div>
+                        )}
+                      </td>
                       <td className="text-center">
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
                           <button
@@ -321,6 +495,15 @@ function AdminView({ onRefresh }) {
                               title="Approve"
                             >
                               ✓
+                            </button>
+                          )}
+                          {needsAcknowledgment && (
+                            <button
+                              className="btn btn-warning btn-small"
+                              onClick={() => handleAcknowledgeEdit(log.id)}
+                              title="Acknowledge changes"
+                            >
+                              ✓✓
                             </button>
                           )}
                           <button
@@ -347,6 +530,7 @@ function AdminView({ onRefresh }) {
         </div>
       </div>
 
+      {/* Modals */}
       {editLogId && logToEdit && (
         <EditLogModal
           log={logToEdit}
@@ -364,9 +548,56 @@ function AdminView({ onRefresh }) {
           loading={loading}
         />
       )}
+
+      {editUserEmail && editUserName && (
+        <EditUserNameModal
+          userEmail={editUserEmail}
+          currentName={editUserName}
+          onSave={handleUpdateUserName}
+          onCancel={() => {
+            setEditUserEmail(null);
+            setEditUserName(null);
+          }}
+        />
+      )}
+
+      {changeRoleEmail && changeRoleName && changeRoleCurrent && changeRoleNew && (
+        <ChangeRoleModal
+          userEmail={changeRoleEmail}
+          userName={changeRoleName}
+          currentRole={changeRoleCurrent}
+          newRole={changeRoleNew}
+          onConfirm={() => handleUpdateUserRole(changeRoleEmail, changeRoleNew)}
+          onCancel={() => {
+            setChangeRoleEmail(null);
+            setChangeRoleName(null);
+            setChangeRoleCurrent(null);
+            setChangeRoleNew(null);
+          }}
+        />
+      )}
+
+      {deleteUserEmail && deleteUserName && (
+        <DeleteUserModal
+          userEmail={deleteUserEmail}
+          userName={deleteUserName}
+          onConfirm={handleDeleteUser}
+          onCancel={() => {
+            setDeleteUserEmail(null);
+            setDeleteUserName(null);
+          }}
+          loading={loading}
+        />
+      )}
+
+      {historyLogId && historyLog && (
+        <ChangeHistoryModal
+          log={historyLog}
+          onClose={() => setHistoryLogId(null)}
+        />
+      )}
     </div>
   );
 }
 
 export default AdminView;
-

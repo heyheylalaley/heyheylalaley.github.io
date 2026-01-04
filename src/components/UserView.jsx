@@ -12,6 +12,7 @@ import LogsList from './user/LogsList';
 import EditNameModal from './modals/EditNameModal';
 import EditLogModal from './modals/EditLogModal';
 import DeleteConfirmModal from './modals/DeleteConfirmModal';
+import ChangeHistoryModal from './modals/ChangeHistoryModal';
 import './UserView.css';
 
 function UserView({ onRefresh }) {
@@ -19,6 +20,7 @@ function UserView({ onRefresh }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showEditNameModal, setShowEditNameModal] = useState(false);
+  const [historyLogId, setHistoryLogId] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Calculate balance and stats
@@ -85,12 +87,18 @@ function UserView({ onRefresh }) {
         ? factHours * currentMultiplier
         : -factHours;
       
-      const updated = await updateLog(logId, {
-        date,
-        fact_hours: factHours,
-        credited_hours: creditedHours,
-        comment: comment || null
-      });
+      const log = filteredAndSortedLogs.find(l => l.id === logId);
+      const updated = await updateLog(
+        logId,
+        {
+          date,
+          fact_hours: factHours,
+          credited_hours: creditedHours,
+          comment: comment || null
+        },
+        currentUser,
+        log
+      );
       
       updateLogStore(logId, updated);
       setEditLogId(null);
@@ -212,6 +220,7 @@ function UserView({ onRefresh }) {
             currentUser={currentUser}
             onEdit={(id) => setEditLogId(id)}
             onDelete={(id) => setDeleteLogId(id)}
+            onViewHistory={(id) => setHistoryLogId(id)}
           />
         </div>
       </div>
@@ -239,6 +248,13 @@ function UserView({ onRefresh }) {
           onConfirm={handleDeleteLog}
           onCancel={() => setDeleteLogId(null)}
           loading={loading}
+        />
+      )}
+
+      {historyLogId && (
+        <ChangeHistoryModal
+          log={filteredAndSortedLogs.find(l => l.id === historyLogId)}
+          onClose={() => setHistoryLogId(null)}
         />
       )}
     </div>

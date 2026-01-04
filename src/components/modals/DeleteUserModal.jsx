@@ -1,11 +1,16 @@
 import './Modal.css';
 
-function DeleteConfirmModal({ onConfirm, onCancel, loading }) {
+function DeleteUserModal({ userEmail, userName, onConfirm, onCancel, loading }) {
   return (
     <div className="modal">
       <div className="modal-content">
-        <h3>Confirm Deletion</h3>
-        <p>Are you sure you want to delete this entry? This action cannot be undone.</p>
+        <h3>Confirm User Deletion</h3>
+        <p>
+          Are you sure you want to delete user <strong>{userName}</strong> ({userEmail})?
+          <br />
+          <br />
+          This action cannot be undone. All entries for this user will also be deleted.
+        </p>
         <div className="modal-actions">
           <button
             className="btn btn-danger"
@@ -27,6 +32,5 @@ function DeleteConfirmModal({ onConfirm, onCancel, loading }) {
   );
 }
 
-export default DeleteConfirmModal;
-
+export default DeleteUserModal;
 

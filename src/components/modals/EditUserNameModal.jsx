@@ -1,26 +1,26 @@
 import { useState } from 'react';
 import './Modal.css';
 
-function EditNameModal({ currentName, onSave, onCancel }) {
+function EditUserNameModal({ userEmail, currentName, onSave, onCancel }) {
   const [name, setName] = useState(currentName);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (name.trim()) {
-      onSave(name.trim());
+      onSave(userEmail, name.trim());
     }
   };
 
   return (
     <div className="modal">
       <div className="modal-content">
-        <h3>Edit Name</h3>
+        <h3>Edit User Name</h3>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="nameInput">Name:</label>
+            <label htmlFor="userNameInput">Name:</label>
             <input
               type="text"
-              id="nameInput"
+              id="userNameInput"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength="100"
@@ -42,6 +42,5 @@ function EditNameModal({ currentName, onSave, onCancel }) {
   );
 }
 
-export default EditNameModal;
-
+export default EditUserNameModal;
 

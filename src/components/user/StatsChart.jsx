@@ -84,3 +84,4 @@ function StatsChart({ logs }) {
 
 export default StatsChart;
 
+

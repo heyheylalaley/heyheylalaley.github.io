@@ -75,3 +75,4 @@ function EditLogModal({ log, multiplier, onSave, onCancel, loading }) {
 
 export default EditLogModal;
 
+

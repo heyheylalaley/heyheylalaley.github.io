@@ -2,7 +2,7 @@ import { formatDate, formatHours } from '../../utils/format';
 import { parseISO, differenceInMinutes } from 'date-fns';
 import './LogsList.css';
 
-function LogsList({ logs, currentUser, onEdit, onDelete }) {
+function LogsList({ logs, currentUser, onEdit, onDelete, onViewHistory }) {
   const canDelete = (log) => {
     try {
       const createdAt = parseISO(log.createdAt);
@@ -40,7 +40,12 @@ function LogsList({ logs, currentUser, onEdit, onDelete }) {
                 </span>
                 <span className="log-date">{formatDate(log.date)}</span>
                 {hasHistory && (
-                  <span className="history-badge" title={`${log.changeHistory.length} changes`}>
+                  <span
+                    className="history-badge"
+                    onClick={() => onViewHistory && onViewHistory(log.id)}
+                    title={`View change history (${log.changeHistory.length} changes)`}
+                    style={{ cursor: onViewHistory ? 'pointer' : 'default' }}
+                  >
                     📜 {log.changeHistory.length}
                   </span>
                 )}
@@ -96,4 +101,5 @@ function LogsList({ logs, currentUser, onEdit, onDelete }) {
 }
 
 export default LogsList;
+
 

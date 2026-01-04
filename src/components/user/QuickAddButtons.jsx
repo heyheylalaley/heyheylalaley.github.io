@@ -48,3 +48,4 @@ function QuickAddButtons({ onQuickAdd, onCustomClick, loading }) {
 
 export default QuickAddButtons;
 
+

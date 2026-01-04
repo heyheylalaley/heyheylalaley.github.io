@@ -11,3 +11,4 @@ export const loadSettings = async () => {
   return multiplierSetting ? parseFloat(multiplierSetting.value) : 1.5;
 };
 
+

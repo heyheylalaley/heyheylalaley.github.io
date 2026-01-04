@@ -643,6 +643,15 @@ body {
   background: #dc2626;
 }
 
+.btn-warning {
+  background: var(--warning);
+  color: white;
+}
+
+.btn-warning:hover {
+  background: var(--warning-dark);
+}
+
 .btn-large {
   padding: 12px 24px;
   font-size: 16px;

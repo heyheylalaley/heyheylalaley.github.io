@@ -42,3 +42,4 @@ function BalanceCard({ balance, multiplier, totalOvertime, totalTimeOff, onEditN
 
 export default BalanceCard;
 
+
