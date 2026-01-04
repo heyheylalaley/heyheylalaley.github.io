@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  // Base path for GitHub Pages (empty for root domain)
+  // If deploying to subdirectory, use: base: '/repository-name/'
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
