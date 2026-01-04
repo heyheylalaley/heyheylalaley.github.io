@@ -2059,9 +2059,11 @@ function renderUsersList() {
             <button class="user-edit-name-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Edit name">
               ✏️
             </button>
-            <button class="user-role-btn ${isAdmin ? 'admin' : ''}" data-email="${user.email}" data-role="${user.role}" data-name="${escapeHtml(user.name)}" title="${isAdmin ? 'Remove admin role' : 'Make admin'}">
-              ${isAdmin ? '👑' : '👤'}
-            </button>
+            ${!isAdmin ? `
+              <button class="user-role-btn" data-email="${user.email}" data-role="${user.role}" data-name="${escapeHtml(user.name)}" title="Make admin">
+                👤
+              </button>
+            ` : ''}
             <button class="user-delete-btn" data-email="${user.email}" data-name="${escapeHtml(user.name)}" title="Delete user">
               🗑️
             </button>
@@ -2923,6 +2925,13 @@ async function handleUpdateUserRole(userEmail, newRole) {
   
   if (!['user', 'admin'].includes(newRole)) {
     showToast('Invalid role', 'error', 'Error');
+    return;
+  }
+  
+  // Check if user is already an admin - prevent removing admin role
+  const targetUser = currentUsers.find(u => u.email === userEmail);
+  if (targetUser && targetUser.role === 'admin' && newRole === 'user') {
+    showToast('You cannot remove administrator role from other administrators', 'error', 'Error');
     return;
   }
   
