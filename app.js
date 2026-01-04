@@ -23,6 +23,7 @@ let currentLogs = [];
 let currentUsers = [];
 let currentMultiplier = 1.5;
 let deleteLogId = null; // For delete modal
+let editLogId = null; // For edit modal
 let filteredLogs = []; // For search functionality
 let currentDateFilter = 'all'; // Current date filter (all, today, week, month)
 let sortOrder = 'desc'; // Sort order: 'desc' (newest first) or 'asc' (oldest first)
@@ -887,6 +888,43 @@ function hideDeleteUserModal() {
   }
 }
 
+// Edit log modal functions
+function showEditLogModal(logId) {
+  const log = currentLogs.find(l => l.id == logId);
+  if (!log) return;
+  
+  // Check if user can edit this log (own logs only for non-admins)
+  if (currentUser.role !== 'admin' && log.userEmail !== currentUser.email) {
+    showToast('You can only edit your own entries', 'error', 'Error');
+    return;
+  }
+  
+  editLogId = logId;
+  const modal = document.getElementById('editLogModal');
+  const dateInput = document.getElementById('editLogDate');
+  const hoursInput = document.getElementById('editLogHours');
+  const commentInput = document.getElementById('editLogComment');
+  
+  if (modal && dateInput && hoursInput && commentInput) {
+    // Set values
+    const dateStr = log.date.split('T')[0];
+    dateInput.value = dateStr;
+    hoursInput.value = log.factHours;
+    commentInput.value = log.comment || '';
+    
+    modal.classList.remove('hidden');
+    hoursInput.focus();
+  }
+}
+
+function hideEditLogModal() {
+  editLogId = null;
+  const modal = document.getElementById('editLogModal');
+  if (modal) {
+    modal.classList.add('hidden');
+  }
+}
+
 // Setup event listeners
 function setupEventListeners() {
   // Theme toggle
@@ -1080,6 +1118,16 @@ function setupEventListeners() {
     deleteUserCancelBtn.addEventListener('click', hideDeleteUserModal);
   }
   
+  // Edit log modal
+  const editLogForm = document.getElementById('editLogForm');
+  const editLogCancelBtn = document.getElementById('editLogCancelBtn');
+  if (editLogForm) {
+    editLogForm.addEventListener('submit', handleEditLog);
+  }
+  if (editLogCancelBtn) {
+    editLogCancelBtn.addEventListener('click', hideEditLogModal);
+  }
+  
   // Close modals on backdrop click
   const modals = document.querySelectorAll('.modal');
   modals.forEach(modal => {
@@ -1210,6 +1258,7 @@ function setupEventListeners() {
       hideDeleteModal();
       hideEditNameModal();
       hideDeleteUserModal();
+      hideEditLogModal();
     }
   });
 }
@@ -1287,7 +1336,8 @@ async function loadUserLogs() {
       creditedHours: log.credited_hours,
       comment: log.comment || '',
       createdAt: log.created_at,
-      approvedBy: log.approved_by || ''
+      approvedBy: log.approved_by || '',
+      editedAt: log.edited_at || null
     }));
   } catch (error) {
     console.error('Logs loading error:', error);
@@ -1317,7 +1367,8 @@ async function loadAllLogs() {
       creditedHours: log.credited_hours,
       comment: log.comment || '',
       createdAt: log.created_at,
-      approvedBy: log.approved_by || ''
+      approvedBy: log.approved_by || '',
+      editedAt: log.edited_at || null
     }));
   } catch (error) {
     console.error('All logs loading error:', error);
@@ -1765,14 +1816,20 @@ function renderUserLogs() {
             Actual: <strong>${log.factHours} hrs</strong>
           </div>
           ${log.comment ? `<div class="log-comment">${escapeHtml(log.comment)}</div>` : ''}
-          ${log.type === 'timeoff' && log.approvedBy ? `<div class="log-approved-by" style="margin-top: 4px; font-size: 12px; color: var(--gray-600);">Approved By: <strong>${escapeHtml(log.approvedBy)}</strong></div>` : ''}
+          ${log.type === 'timeoff' && log.approvedBy ? `
+            <div class="log-approved-by" style="margin-top: 4px; font-size: 12px; color: var(--gray-600);">
+              Approved By: <strong>${escapeHtml(log.approvedBy)}</strong>
+              ${log.editedAt ? `<span class="edited-badge" title="Edited after approval">⚠️ edited</span>` : ''}
+            </div>
+          ` : ''}
+          ${log.editedAt && !(log.type === 'timeoff' && log.approvedBy) ? `<div class="log-edited" style="margin-top: 4px; font-size: 11px; color: var(--gray-500);">✏️ edited</div>` : ''}
         </div>
         <div class="log-item-right">
           <div class="log-credited ${credited > 0 ? 'positive' : 'negative'}">
             ${credited > 0 ? '+' : ''}${credited} hrs
           </div>
-          <button class="log-delete-btn" onclick="showDeleteModal(${log.id})" title="Delete entry">
-            🗑️
+          <button class="log-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit entry">
+            ✏️
           </button>
         </div>
       </div>
@@ -1978,7 +2035,21 @@ function renderAdminLogs() {
   logsToShow.forEach((log, index) => {
     const credited = parseFloat(log.creditedHours) || 0;
     const userName = currentUsers.find(u => u.email === log.userEmail)?.name || log.userEmail;
-    const approvedByText = log.type === 'timeoff' && log.approvedBy ? `<br><small style="color: var(--gray-600);">Approved By: ${escapeHtml(log.approvedBy)}</small>` : '';
+    
+    // Build approval text with edited indicator
+    let approvedByText = '';
+    if (log.type === 'timeoff' && log.approvedBy) {
+      approvedByText = `<br><small style="color: var(--gray-600);">Approved By: ${escapeHtml(log.approvedBy)}`;
+      if (log.editedAt) {
+        approvedByText += ` <span class="edited-badge-warning" title="Edited after approval">⚠️</span>`;
+      }
+      approvedByText += `</small>`;
+    }
+    
+    // Simple edited indicator for non-approved entries
+    const editedText = log.editedAt && !(log.type === 'timeoff' && log.approvedBy) 
+      ? `<br><small style="color: var(--gray-500);">✏️ edited</small>` 
+      : '';
     
     const row = document.createElement('tr');
     row.style.opacity = '0';
@@ -1996,13 +2067,16 @@ function renderAdminLogs() {
       <td class="text-right ${credited > 0 ? 'positive' : 'negative'}" style="font-weight: 600; color: ${credited > 0 ? 'var(--success)' : 'var(--danger)'}">
         ${credited > 0 ? '+' : ''}${credited}
       </td>
-      <td>${escapeHtml(log.comment || '')}${approvedByText}</td>
+      <td>${escapeHtml(log.comment || '')}${approvedByText}${editedText}</td>
       <td class="text-center" style="white-space: nowrap;">
         ${log.type === 'timeoff' && !log.approvedBy ? `
           <button class="table-action-btn table-approve-btn" onclick="approveEntry(${log.id})" title="Approve">
             ✅
           </button>
         ` : ''}
+        <button class="table-action-btn table-edit-btn" onclick="showEditLogModal(${log.id})" title="Edit">
+          ✏️
+        </button>
         <button class="table-action-btn" onclick="showDeleteModal(${log.id})" title="Delete">
           🗑️
         </button>
@@ -2233,7 +2307,8 @@ async function handleDeleteLog(logId) {
           factHours: data.fact_hours,
           creditedHours: data.credited_hours,
           comment: data.comment,
-          approvedBy: data.approved_by
+          approvedBy: data.approved_by,
+          editedAt: data.edited_at
         };
         
         currentLogs.push(restoredLog);
@@ -2314,6 +2389,126 @@ async function approveEntry(logId) {
     renderAdminView();
     console.error('Approve error:', error);
     showToast('Error approving entry: ' + error.message, 'error', 'Error');
+  }
+}
+
+// Edit log entry
+async function handleEditLog(e) {
+  e.preventDefault();
+  
+  if (!editLogId) return;
+  
+  const log = currentLogs.find(l => l.id == editLogId);
+  if (!log) {
+    hideEditLogModal();
+    return;
+  }
+  
+  // Check if user can edit this log
+  if (currentUser.role !== 'admin' && log.userEmail !== currentUser.email) {
+    showToast('You can only edit your own entries', 'error', 'Error');
+    hideEditLogModal();
+    return;
+  }
+  
+  const newDate = document.getElementById('editLogDate').value;
+  const newHours = parseFloat(document.getElementById('editLogHours').value);
+  const newComment = document.getElementById('editLogComment').value.trim();
+  
+  // Validation
+  if (!newDate) {
+    showToast('Please select a date', 'warning');
+    return;
+  }
+  
+  if (!newHours || newHours <= 0 || newHours > 24) {
+    showToast('Hours must be between 0.25 and 24', 'warning');
+    return;
+  }
+  
+  // Calculate new credited hours
+  const newCreditedHours = log.type === 'overtime' 
+    ? newHours * currentMultiplier 
+    : -newHours;
+  
+  // Check if anything changed
+  const oldDateStr = log.date.split('T')[0];
+  if (newDate === oldDateStr && newHours === log.factHours && newComment === (log.comment || '')) {
+    hideEditLogModal();
+    return;
+  }
+  
+  // Store old values for rollback
+  const oldDate = log.date;
+  const oldFactHours = log.factHours;
+  const oldCreditedHours = log.creditedHours;
+  const oldComment = log.comment;
+  const oldEditedAt = log.editedAt;
+  
+  // Store ID before hiding modal
+  const logIdToUpdate = editLogId;
+  
+  // Check if entry was approved - mark as edited after approval
+  const wasApproved = log.type === 'timeoff' && log.approvedBy;
+  const editedAt = new Date().toISOString();
+  
+  // Optimistic update
+  log.date = newDate;
+  log.factHours = newHours;
+  log.creditedHours = newCreditedHours;
+  log.comment = newComment;
+  log.editedAt = editedAt;
+  
+  // Update UI immediately
+  if (currentUser.role === 'admin') {
+    renderAdminView();
+  } else {
+    renderUserView();
+  }
+  
+  hideEditLogModal();
+  
+  // Save to Supabase
+  if (!supabaseClient) {
+    showToast('Supabase client not initialized', 'error', 'Error');
+    return;
+  }
+  
+  try {
+    const { error } = await supabaseClient
+      .from('logs')
+      .update({
+        date: newDate,
+        fact_hours: newHours,
+        credited_hours: newCreditedHours,
+        comment: newComment,
+        edited_at: editedAt
+      })
+      .eq('id', logIdToUpdate);
+    
+    if (error) throw error;
+    
+    if (wasApproved) {
+      showToast('Entry updated (was already approved)', 'warning');
+    } else {
+      showToast('Entry updated', 'success');
+    }
+  } catch (error) {
+    // Rollback on error
+    log.date = oldDate;
+    log.factHours = oldFactHours;
+    log.creditedHours = oldCreditedHours;
+    log.comment = oldComment;
+    log.editedAt = oldEditedAt;
+    
+    if (currentUser.role === 'admin') {
+      renderAdminView();
+    } else {
+      renderUserView();
+    }
+    
+    console.error('Edit error:', error);
+    showToast('Error updating entry: ' + error.message, 'error', 'Error');
   }
 }
 
@@ -2553,5 +2748,6 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// Export function for global use
+// Export functions for global use
 window.showDeleteModal = showDeleteModal;
+window.showEditLogModal = showEditLogModal;

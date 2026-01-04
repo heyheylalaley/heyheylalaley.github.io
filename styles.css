@@ -207,6 +207,19 @@
   color: var(--text-muted);
 }
 
+[data-theme="dark"] .log-edit-btn:hover,
+[data-theme="dark"] .log-delete-btn:hover {
+  background: var(--bg-input);
+}
+
+[data-theme="dark"] .log-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.2);
+}
+
+[data-theme="dark"] .table-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.2);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: var(--bg-primary);
@@ -1021,6 +1034,7 @@ body {
   gap: 8px;
 }
 
+.log-edit-btn,
 .log-delete-btn {
   background: transparent;
   border: none;
@@ -1032,13 +1046,43 @@ body {
   transition: all 0.2s;
 }
 
+.log-item:hover .log-edit-btn,
 .log-item:hover .log-delete-btn {
   opacity: 0.6;
 }
 
+.log-edit-btn:hover,
 .log-delete-btn:hover {
   opacity: 1 !important;
   background: var(--gray-100);
+}
+
+.log-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
+}
+
+/* Edited badge styles */
+.edited-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 6px;
+  font-size: 10px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--warning);
+  border-radius: 4px;
+}
+
+.edited-badge-warning {
+  color: var(--warning);
+  cursor: help;
+}
+
+.table-action-btn.table-edit-btn {
+  color: var(--primary);
+}
+
+.table-action-btn.table-edit-btn:hover {
+  background: rgba(79, 70, 229, 0.1);
 }
 
 /* Users List */
@@ -1746,6 +1790,7 @@ select:focus-visible {
     width: 100%;
   }
   
+  .log-edit-btn,
   .log-delete-btn {
     opacity: 0.6;
   }
