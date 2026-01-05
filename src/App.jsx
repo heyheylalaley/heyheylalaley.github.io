@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useStore } from './store/useStore';
 import { supabase } from './lib/supabase';
 import { getSession, findUserByEmail, createUser } from './services/auth';
+import { updateUserName } from './services/users';
 import { loadUserLogs, loadAllLogs } from './services/logs';
 import { loadUsers } from './services/users';
 import { loadSettings } from './services/settings';
@@ -9,12 +10,14 @@ import { showToast, initToast } from './utils/toast';
 import LoginScreen from './components/LoginScreen';
 import MainApp from './components/MainApp';
 import LoadingOverlay from './components/LoadingOverlay';
+import EditNameModal from './components/modals/EditNameModal';
 import './App.css';
 
 function App() {
   const { currentUser, setUser, setLogs, setUsers, setMultiplier, reset, theme } = useStore();
   const [loading, setLoading] = useState(true);
   const [isCheckingSession, setIsCheckingSession] = useState(false);
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
 
   useEffect(() => {
     // Initialize theme
@@ -102,6 +105,16 @@ function App() {
       localStorage.setItem('user', JSON.stringify(user));
       await loadUserData(user);
       
+      // Check if name needs to be set (if it's just the email prefix or empty)
+      const emailPrefix = normalizedEmail.split('@')[0];
+      const needsName = !userData.name || 
+                       userData.name.trim() === '' || 
+                       userData.name.toLowerCase() === emailPrefix.toLowerCase();
+      
+      if (needsName) {
+        setShowNamePrompt(true);
+      }
+      
       // Clean URL hash
       if (window.location.hash) {
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -113,6 +126,22 @@ function App() {
       showToast('Error signing in: ' + error.message, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveName = async (name) => {
+    if (!currentUser || !name.trim()) return;
+    
+    try {
+      await updateUserName(currentUser.email, name.trim());
+      const updatedUser = { ...currentUser, name: name.trim() };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setShowNamePrompt(false);
+      showToast('Name saved successfully', 'success');
+    } catch (error) {
+      console.error('Error saving name:', error);
+      showToast('Error saving name: ' + error.message, 'error');
     }
   };
 
@@ -151,6 +180,14 @@ function App() {
   return (
     <>
       {currentUser ? <MainApp /> : <LoginScreen />}
+      {showNamePrompt && currentUser && (
+        <EditNameModal
+          currentName={currentUser.name || ''}
+          onSave={handleSaveName}
+          onCancel={() => setShowNamePrompt(false)}
+          required={true}
+        />
+      )}
     </>
   );
 }

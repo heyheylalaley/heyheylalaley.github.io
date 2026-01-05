@@ -11,9 +11,15 @@ function EditUserNameModal({ userEmail, currentName, onSave, onCancel }) {
     }
   };
 
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onCancel();
+    }
+  };
+
   return (
-    <div className="modal">
-      <div className="modal-content">
+    <div className="modal" onClick={handleBackdropClick}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <h3>Edit User Name</h3>
         <form onSubmit={handleSubmit}>
           <div className="form-group">

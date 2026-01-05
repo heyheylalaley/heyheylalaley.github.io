@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import './Modal.css';
 
-function EditNameModal({ currentName, onSave, onCancel }) {
+function EditNameModal({ currentName, onSave, onCancel, required = false }) {
   const [name, setName] = useState(currentName);
 
   const handleSubmit = (e) => {
@@ -11,10 +11,21 @@ function EditNameModal({ currentName, onSave, onCancel }) {
     }
   };
 
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && !required) {
+      onCancel();
+    }
+  };
+
   return (
-    <div className="modal">
-      <div className="modal-content">
-        <h3>Edit Name</h3>
+    <div className="modal" onClick={handleBackdropClick}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <h3>{required ? 'Please Enter Your Name' : 'Edit Name'}</h3>
+        {required && (
+          <p style={{ marginBottom: '16px', color: 'var(--text-secondary)' }}>
+            We need your name to personalize your experience.
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="nameInput">Name:</label>
@@ -32,9 +43,11 @@ function EditNameModal({ currentName, onSave, onCancel }) {
             <button type="submit" className="btn btn-primary">
               Save
             </button>
-            <button type="button" onClick={onCancel} className="btn btn-secondary">
-              Cancel
-            </button>
+            {!required && (
+              <button type="button" onClick={onCancel} className="btn btn-secondary">
+                Cancel
+              </button>
+            )}
           </div>
         </form>
       </div>
